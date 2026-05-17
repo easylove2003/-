@@ -202,7 +202,8 @@ export function AIAssistant() {
              newM[newM.length - 1].content += `\n\n**Error:** ${errMsg}`;
              return newM;
           });
-        }
+        },
+        { includeCanvasProtocol: true }
       );
       
       // Strip JSON blocks to avoid printing JSON to user

@@ -5,17 +5,17 @@ export interface ChatMessage {
   parts: { text: string }[];
 }
 
-export async function fetchChatStream(
-  contents: ChatMessage[],
-  systemInstructionText: string,
-  onChunk: (text: string) => void,
-  onError: (msg: string) => void
-) {
-  const apiKey = localStorage.getItem('gemini_api_key') || '';
-  const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (apiKey) requestHeaders['Authorization'] = `Bearer ${apiKey}`;
+export interface ChatStreamOptions {
+  /**
+   * 是否在 systemInstruction 末尾注入 Canvas 协议。
+   * 仅 AIAssistant 等"双通道"场景应设为 true。
+   * 默认 false：SmartReport / DataAnalysis / DataCompare 等纯 Markdown 输出场景不需要，
+   * 避免诱导模型在非画布页面输出 canvas-directive 污染正文。
+   */
+  includeCanvasProtocol?: boolean;
+}
 
-  const canvasProtocol = `
+const CANVAS_PROTOCOL = `
 
 ═══ CANVAS PROTOCOL（画布协议）═══
 
@@ -75,19 +75,36 @@ Action = { id, title, owner, timeline, ice:{i,c,e}, impact, checklist?: Checklis
 
 ═══════════════════════════`;
 
+export async function fetchChatStream(
+  contents: ChatMessage[],
+  systemInstructionText: string,
+  onChunk: (text: string) => void,
+  onError: (msg: string) => void,
+  options: ChatStreamOptions = {}
+) {
+  const { includeCanvasProtocol = false } = options;
+
+  const apiKey = localStorage.getItem('gemini_api_key') || '';
+  const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) requestHeaders['Authorization'] = `Bearer ${apiKey}`;
+
+  const finalSystemPrompt = includeCanvasProtocol
+    ? systemInstructionText + CANVAS_PROTOCOL
+    : systemInstructionText;
+
   try {
     await fetchEventSource('/api/chat', {
       method: 'POST',
       headers: requestHeaders,
       body: JSON.stringify({
         contents,
-        systemInstruction: { parts: [{ text: systemInstructionText + canvasProtocol }] }
+        systemInstruction: { parts: [{ text: finalSystemPrompt }] }
       }),
       async onopen(response) {
         if (!response.ok) {
-           let errMessage = 'Internal Server Error';
-           try { const errObj = await response.json(); errMessage = errObj.error || errMessage; } catch(e){}
-           throw new Error(errMessage);
+          let errMessage = 'Internal Server Error';
+          try { const errObj = await response.json(); errMessage = errObj.error || errMessage; } catch (e) {}
+          throw new Error(errMessage);
         }
       },
       onmessage(event) {
@@ -99,11 +116,10 @@ Action = { id, title, owner, timeline, ice:{i,c,e}, impact, checklist?: Checklis
           console.error('Failed to parse SSE data', e);
           return;
         }
-        
         if (data.type === 'token') {
           onChunk(data.content);
         } else if (data.type === 'error') {
-           throw new Error(data.error);
+          throw new Error(data.error);
         }
       },
       onerror(err) {

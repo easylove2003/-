@@ -9,7 +9,11 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { ConfidenceBadge, processConfidenceTags, countLowConfidence } from '../components/ConfidenceBadge';
 import { calculateQualityScore, QualityResult } from '../lib/qualityScore';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
+import {
+  LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell,
+  Scatter, ScatterChart, ZAxis
+} from 'recharts';
 import { eCommerceSampleData } from '../data/ecommerce_sample';
 import { fetchChatStream } from '../lib/api';
 import { exportToPDF, exportToPPT, shareReport } from '../lib/exportUtils';
@@ -17,67 +21,159 @@ import { Share2, Presentation } from 'lucide-react';
 import { buildSystemPrompt } from '../prompts';
 
 const RenderChart = ({ config }: { config: any }) => {
-  if (!config || !config.data || !Array.isArray(config.data) || config.data.length === 0 || !Array.isArray(config.series)) return null;
+  if (!config || !Array.isArray(config.data) || config.data.length === 0 || !Array.isArray(config.series)) {
+    return null;
+  }
 
+  const wrap = (children: React.ReactNode) => (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 w-full h-[360px] flex flex-col my-8 not-prose">
+      <h3 className="text-lg font-bold text-gray-900 mb-4">{config.title || 'Chart'}</h3>
+      <div className="flex-1 w-full relative">
+        <ResponsiveContainer width="100%" height="100%">
+          {children as any}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+
+  // ── pie ──────────────────────────────────────────────
   if (config.type === 'pie') {
     const dataKey = config.series[0]?.key || Object.keys(config.data[0])[1];
     const nameKey = config.xAxisKey;
-    return (
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 w-full h-[360px] flex flex-col my-8 not-prose">
-         <h3 className="text-lg font-bold text-gray-900 mb-4">{config.title || 'Chart'}</h3>
-         <div className="flex-1 w-full relative">
-           <ResponsiveContainer width="100%" height="100%">
-             <PieChart>
-               <Pie 
-                  data={config.data} 
-                  dataKey={dataKey} 
-                  nameKey={nameKey} 
-                  cx="50%" 
-                  cy="50%" 
-                  innerRadius={60} 
-                  outerRadius={100} 
-                  fill="#8884d8" 
-                  paddingAngle={2}
-               >
-                 {config.data.map((entry: any, index: number) => (
-                   <Cell key={`cell-${index}`} fill={entry.fill || config.series[0]?.color || '#3B82F6'} />
-                 ))}
-               </Pie>
-               <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-               <Legend wrapperStyle={{ fontSize: '12px' }} />
-             </PieChart>
-           </ResponsiveContainer>
-         </div>
-      </div>
+    return wrap(
+      <PieChart>
+        <Pie data={config.data} dataKey={dataKey} nameKey={nameKey}
+             cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2}>
+          {config.data.map((entry: any, i: number) => (
+            <Cell key={i} fill={entry.fill || config.series[0]?.color || '#3B82F6'} />
+          ))}
+        </Pie>
+        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+        <Legend wrapperStyle={{ fontSize: '12px' }} />
+      </PieChart>
     );
   }
 
+  // ── waterfall ────────────────────────────────────────
+  // 第一项与最后一项是绝对值（起点/终点），中间项是带符号 delta。
+  // 用堆叠条实现：base 透明、value 着色。正值绿、负值红、起终点蓝。
+  if (config.type === 'waterfall') {
+    const key = config.series[0]?.key || 'value';
+    let cumulative = 0;
+    const last = config.data.length - 1;
+    const transformed = config.data.map((row: any, i: number) => {
+      const raw = Number(row[key]) || 0;
+      const isAnchor = i === 0 || i === last;
+      let base = 0, value = 0, color = '#3B82F6';
+      if (isAnchor) {
+        value = raw;
+        base = 0;
+        cumulative = raw;
+        color = '#3B82F6';
+      } else if (raw >= 0) {
+        base = cumulative;
+        value = raw;
+        cumulative += raw;
+        color = '#10B981';
+      } else {
+        cumulative += raw;          // raw is negative
+        base = cumulative;
+        value = -raw;
+        color = '#EF4444';
+      }
+      return { ...row, __base: base, __value: value, __color: color };
+    });
+
+    return wrap(
+      <BarChart data={transformed} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+        <XAxis dataKey={config.xAxisKey} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+        <Tooltip
+          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+          formatter={(_v: any, _n: any, p: any) => [p?.payload?.[key], key]}
+        />
+        <Bar dataKey="__base" stackId="wf" fill="transparent" />
+        <Bar dataKey="__value" stackId="wf" radius={[4, 4, 0, 0]}>
+          {transformed.map((row: any, i: number) => <Cell key={i} fill={row.__color} />)}
+        </Bar>
+      </BarChart>
+    );
+  }
+
+  // ── funnel ───────────────────────────────────────────
+  // 用水平条形图 + 降序排序，模拟漏斗。
+  if (config.type === 'funnel') {
+    const key = config.series[0]?.key || 'value';
+    const sorted = [...config.data].sort((a, b) => (Number(b[key]) || 0) - (Number(a[key]) || 0));
+    return wrap(
+      <BarChart data={sorted} layout="vertical" margin={{ top: 10, right: 30, left: 60, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
+        <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+        <YAxis type="category" dataKey={config.xAxisKey} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7280' }} width={100} />
+        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+        <Bar dataKey={key} name={config.series[0]?.name || key} fill={config.series[0]?.color || '#6366F1'} radius={[0, 4, 4, 0]} />
+      </BarChart>
+    );
+  }
+
+  // ── scatter ──────────────────────────────────────────
+  // 每个 series 需要 xKey / yKey；可选 zKey 控制点大小
+  if (config.type === 'scatter') {
+    return wrap(
+      <ScatterChart margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+        <XAxis type="number" dataKey={config.series[0]?.xKey || 'x'} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+        <YAxis type="number" dataKey={config.series[0]?.yKey || 'y'} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+        <ZAxis type="number" range={[60, 200]} />
+        <Tooltip cursor={{ strokeDasharray: '3 3' }}
+                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+        <Legend wrapperStyle={{ fontSize: '12px' }} />
+        {config.series.map((s: any, idx: number) => (
+          <Scatter
+            key={idx}
+            name={s.name || s.yKey || `Series ${idx + 1}`}
+            data={config.data}
+            fill={s.color || '#3B82F6'}
+          />
+        ))}
+      </ScatterChart>
+    );
+  }
+
+  // ── area / bar / line ────────────────────────────────
+  const knownTypes = new Set(['area', 'bar', 'line']);
+  if (!knownTypes.has(config.type)) {
+    return (
+      <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-sm text-amber-800 my-4 not-prose">
+        [Chart Engine] 不支持的图表类型 "<code className="font-mono">{config.type}</code>"。
+        当前支持：area / bar / line / pie / waterfall / funnel / scatter。
+      </div>
+    );
+  }
   const ChartComponent = config.type === 'area' ? AreaChart : config.type === 'bar' ? BarChart : LineChart;
-  
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 w-full h-[360px] flex flex-col my-8 not-prose">
-       <h3 className="text-lg font-bold text-gray-900 mb-4">{config.title || 'Chart'}</h3>
-       <div className="flex-1 w-full relative">
-         <ResponsiveContainer width="100%" height="100%">
-           <ChartComponent data={config.data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-             <XAxis dataKey={config.xAxisKey} axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#6B7280'}} />
-             <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#6B7280'}} tickFormatter={(v: any) => !isNaN(v) && v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
-             <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-             <Legend wrapperStyle={{ fontSize: '12px' }} />
-             {config.series.map((s: any, idx: number) => {
-               if (config.type === 'area') {
-                 return <Area key={idx} type="monotone" dataKey={s.key} name={s.name || s.key} stroke={s.color || '#3B82F6'} fill={s.color || '#3B82F6'} fillOpacity={0.2} strokeWidth={2} />
-               } else if (config.type === 'bar') {
-                 return <Bar key={idx} dataKey={s.key} name={s.name || s.key} fill={s.color || '#10B981'} radius={[4,4,0,0]} />
-               } else {
-                 return <Line key={idx} type="monotone" dataKey={s.key} name={s.name || s.key} stroke={s.color || '#F59E0B'} strokeWidth={3} dot={false} />
-               }
-             })}
-           </ChartComponent>
-         </ResponsiveContainer>
-       </div>
-    </div>
+
+  return wrap(
+    <ChartComponent data={config.data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+      <XAxis dataKey={config.xAxisKey} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7280' }}
+             tickFormatter={(v: any) => !isNaN(v) && v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v} />
+      <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+      <Legend wrapperStyle={{ fontSize: '12px' }} />
+      {config.series.map((s: any, idx: number) => {
+        if (config.type === 'area') {
+          return <Area key={idx} type="monotone" dataKey={s.key} name={s.name || s.key}
+                       stroke={s.color || '#3B82F6'} fill={s.color || '#3B82F6'} fillOpacity={0.2} strokeWidth={2} />;
+        }
+        if (config.type === 'bar') {
+          return <Bar key={idx} dataKey={s.key} name={s.name || s.key}
+                      fill={s.color || '#10B981'} radius={[4, 4, 0, 0]} />;
+        }
+        return <Line key={idx} type="monotone" dataKey={s.key} name={s.name || s.key}
+                     stroke={s.color || '#F59E0B'} strokeWidth={3} dot={false} />;
+      })}
+    </ChartComponent>
   );
 };
 
@@ -207,23 +303,67 @@ CRITICAL: You MUST respond strictly in ${lang === 'en' ? 'English' : 'Chinese'}.
 4. 看板必须按照“概览、趋势、对比、结构、异常、明细、策略”的逻辑生成。
 5. 每个图表必须说明图表类型、使用字段、X轴、Y轴、聚合方式、筛选字段、排序方式、联动方式和业务目的。
 6. [非常重要 - 动态图表能力]：为了让报告更直观，请你在报告的相应部分，直接插入一个 \`\`\`chart 的代码块，我们在前端将会利用 react-markdown 拦截并渲染为酷炫的高级图表面板！
-代码块内必须是一个纯JSON对象，格式严格如下：
+代码块内必须是一个纯JSON对象，支持的 type 与对应数据格式如下：
+
+【area / bar / line】
 \`\`\`chart
 {
-  "title": "图表标题",
-  "type": "area", // 支持: area, bar, line, pie, waterfall, funnel, scatter
-  "xAxisKey": "name", // 横坐标数据字段名(如类别名或日期)
-  "series": [
-    { "key": "value1", "name": "显示名称", "color": "#3B82F6" }
-  ],
-  "data": [
-    {"name": "1月", "value1": 150},
-    {"name": "2月", "value1": 200}
-  ] // 这是实际用于渲染的模拟或汇总数据！请务必根据上传数据样本里的数值进行合理聚合或推算，生成 5~15个 左右的数据点。
+  "title": "月度销售趋势",
+  "type": "area",
+  "xAxisKey": "name",
+  "series": [{ "key": "value1", "name": "GMV", "color": "#3B82F6" }],
+  "data": [{ "name": "1月", "value1": 150 }, { "name": "2月", "value1": 200 }]
 }
 \`\`\`
-对于 pie 饼图，series 数组保留一项即可，你可以在 data 中加上 "fill" 字段来指定每个扇区的颜色。
-每个图表的系列颜色请使用符合商业报表质感的色带(如 #10B981, #F59E0B, #6366F1 等)！
+
+【pie】series 仅一项，data 中可加 fill 指定每扇区颜色。
+
+【waterfall（瀑布图）】data 第一项与最后一项视为绝对值（起点/终点），中间项为带符号 delta（正负皆可）：
+\`\`\`chart
+{
+  "title": "ROI 异动归因",
+  "type": "waterfall",
+  "xAxisKey": "name",
+  "series": [{ "key": "value", "name": "贡献" }],
+  "data": [
+    { "name": "上周 ROI", "value": 1.5 },
+    { "name": "抖音拉新", "value": -0.6 },
+    { "name": "视频号", "value": 0.1 },
+    { "name": "本周 ROI", "value": 1.0 }
+  ]
+}
+\`\`\`
+
+【funnel（漏斗）】组件自动按 value 降序：
+\`\`\`chart
+{
+  "title": "转化漏斗",
+  "type": "funnel",
+  "xAxisKey": "name",
+  "series": [{ "key": "value", "name": "用户数", "color": "#6366F1" }],
+  "data": [
+    { "name": "曝光", "value": 100000 },
+    { "name": "点击", "value": 35000 },
+    { "name": "加购", "value": 8000 },
+    { "name": "下单", "value": 1800 }
+  ]
+}
+\`\`\`
+
+【scatter（散点图）】series 必须显式声明 xKey / yKey：
+\`\`\`chart
+{
+  "title": "RFM 分布",
+  "type": "scatter",
+  "series": [{ "name": "高价值", "xKey": "frequency", "yKey": "monetary", "color": "#F59E0B" }],
+  "data": [
+    { "frequency": 5, "monetary": 1200 },
+    { "frequency": 8, "monetary": 2400 }
+  ]
+}
+\`\`\`
+
+每个图表生成 5~15 个数据点，颜色使用商业报表色（#3B82F6, #10B981, #F59E0B, #6366F1, #EF4444）。
 
 [第二层：置信度自我评估指令]
 在每条分析结论（包含洞察、业务场景判断、趋势分析）末尾，必须追加置信度评估，格式如下：

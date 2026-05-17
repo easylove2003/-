@@ -32,21 +32,33 @@ async function startServer() {
     }
   }
 
+  // ── Tiny in-memory mutex for reports.json ──────────────────────
+  // Serializes read-modify-write so concurrent /api/report/save calls
+  // don't clobber each other. Errors don't break the chain.
+  let reportsWriteQueue: Promise<void> = Promise.resolve();
+  function withReportsLock<T>(task: () => Promise<T>): Promise<T> {
+    const next = reportsWriteQueue.then(task, task);
+    reportsWriteQueue = next.then(() => undefined, () => undefined);
+    return next;
+  }
+
   app.post("/api/report/save", async (req, res) => {
     try {
       const { reportId, content } = req.body;
       if (!reportId || !content) {
         return res.status(400).json({ error: "Missing reportId or content" });
       }
-      
-      const reports = await getReportsData();
-      reports[reportId] = {
-        id: reportId,
-        content,
-        createdAt: new Date().toISOString()
-      };
-      
-      await fs.writeFile(REPORTS_FILE, JSON.stringify(reports));
+
+      await withReportsLock(async () => {
+        const reports = await getReportsData();
+        reports[reportId] = {
+          id: reportId,
+          content,
+          createdAt: new Date().toISOString()
+        };
+        await fs.writeFile(REPORTS_FILE, JSON.stringify(reports));
+      });
+
       res.json({ success: true, shareUrl: `/shared/${reportId}` });
     } catch (err) {
       console.error(err);
