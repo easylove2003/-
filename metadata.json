@@ -1,0 +1,6 @@
+{
+  "name": "E-Commerce Data Analyst Workspace",
+  "description": "面向电商数据分析师的学习与实践平台，包含大量真实电商分析案例、业务策略、模型复盘以及数据模拟工具。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
