@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 export function Methodologies() {
   const { t } = useLanguage();
   const [selectedMethod, setSelectedMethod] = useState<Methodology | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>('全部');
 
   useEffect(() => {
     if (selectedMethod) {
@@ -18,6 +19,11 @@ export function Methodologies() {
     const cats = Array.from(new Set(methodologies.map(m => m.category)));
     return cats;
   };
+
+  const allCats = ['全部', ...Array.from(new Set(methodologies.map(m => m.category)))];
+  const visibleMethodologies = activeCategory === '全部'
+    ? methodologies
+    : methodologies.filter(m => m.category === activeCategory);
 
   if (selectedMethod) {
     return (
@@ -157,7 +163,7 @@ export function Methodologies() {
                       <span className="text-[#0F0F0F]/75">{mistake}</span>
                     ) : (
                       <div className="space-y-4">
-                        <span className="font-bold text-[#0F0F0F] block text-base sm:text-lg pb-4 border-b border-[#0F0F0F]/10">{mistake.mistake}</span>
+                        <span className="font-bold text-[#0F0F0F] block text-base sm:text-lg pb-4 border-b border-[#0F0F0F]/10">{mistake.mistake || mistake.mistakeName || '常见误区'}</span>
                         {mistake.whyWrong && <div className="text-[#0F0F0F]/70 leading-relaxed"><strong className="text-[#0F0F0F] block mb-1 font-mono uppercase text-[9px] tracking-widest opacity-60">Why it fails</strong>{mistake.whyWrong}</div>}
                         {mistake.correctWay && <div className="text-[#0F0F0F] bg-white/60 p-4 border-l-2 border-[#10B981] leading-relaxed rounded-r-xl"><strong className="text-[#10B981] block mb-1 font-mono uppercase text-[9px] tracking-widest">Correction</strong>{mistake.correctWay}</div>}
                       </div>
@@ -190,15 +196,32 @@ export function Methodologies() {
           <p className="text-[#0F0F0F]/60 text-sm font-mono uppercase tracking-widest">{t('Mastering core analytical paradigms', '从思想到框架，全面掌握数据分析的核心概念。')}</p>
         </div>
 
+        <div className="bg-[#F5F4F0]/70 backdrop-blur-md p-6 border border-[#0F0F0F] mb-12 rounded-xl shadow-sm">
+          <div className="flex items-center gap-3 overflow-x-auto pb-2">
+            <span className="text-[11px] font-mono text-[#0F0F0F] uppercase tracking-widest opacity-60 whitespace-nowrap">{t('Category:', '分类:')}</span>
+            <div className="flex gap-2 flex-nowrap">
+              {allCats.map(cat => (
+                <button 
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={`whitespace-nowrap text-[10px] font-mono uppercase tracking-wider px-3 py-1 border transition-colors ${activeCategory === cat ? 'bg-[#0F0F0F] text-[#F5F4F0] border-[#0F0F0F]' : 'bg-transparent text-[#0F0F0F] border-[#0F0F0F]/20 hover:border-[#0F0F0F]'}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-24">
-          {getCategories().map(cat => (
+          {Array.from(new Set(visibleMethodologies.map(m => m.category))).map(cat => (
             <div key={cat}>
               <h2 className="text-2xl font-mono uppercase tracking-widest text-[#0F0F0F] mb-8 pb-4 border-b border-[#0F0F0F]/20 flex items-center justify-between">
                 <span>{cat}</span>
-                <span className="text-[10px] bg-[#0F0F0F] text-[#F5F4F0] px-3 py-1">Module // {methodologies.filter(m => m.category === cat).length}</span>
+                <span className="text-[10px] bg-[#0F0F0F] text-[#F5F4F0] px-3 py-1">Module // {visibleMethodologies.filter(m => m.category === cat).length}</span>
               </h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {methodologies.filter(m => m.category === cat).map(m => {
+                {visibleMethodologies.filter(m => m.category === cat).map(m => {
                   return (
                     <div 
                       key={m.id} 

@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import cors from "cors";
+import { callProvider } from "./src/server-providers";
 
 async function startServer() {
   const app = express();
@@ -42,15 +43,61 @@ async function startServer() {
     return next;
   }
 
+  // ── Auto-prune reports older than 90 days, keep newest 5000 entries ──────
+  // 在每次写入前调用，避免 reports.json 无限增长
+  function pruneOldReports(reports: Record<string, any>): Record<string, any> {
+    const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+    const MAX_ENTRIES = 5000;
+    const now = Date.now();
+
+    // 按 createdAt 降序，保留最新 MAX_ENTRIES 条
+    const entries = Object.entries(reports)
+      .filter(([_, r]: [string, any]) => {
+        // 没有 createdAt 的旧数据先保留（避免误删）
+        if (!r?.createdAt) return true;
+        const age = now - new Date(r.createdAt).getTime();
+        return age < NINETY_DAYS_MS;
+      })
+      .sort(([_a, a]: any, [_b, b]: any) => {
+        const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      })
+      .slice(0, MAX_ENTRIES);
+
+    return Object.fromEntries(entries);
+  }
+
   app.post("/api/report/save", async (req, res) => {
     try {
       const { reportId, content } = req.body;
+
+      // 必填校验
       if (!reportId || !content) {
         return res.status(400).json({ error: "Missing reportId or content" });
       }
 
+      // reportId 格式校验：6-64 位字母数字下划线短横线
+      if (typeof reportId !== 'string' || !/^[a-zA-Z0-9_-]{6,64}$/.test(reportId)) {
+        return res.status(400).json({ error: "Invalid reportId format" });
+      }
+
+      // 内容类型校验
+      if (typeof content !== 'string' && (typeof content !== 'object' || content === null)) {
+        return res.status(400).json({ error: "Invalid content type" });
+      }
+
+      // 内容大小限制（5 MB）
+      const contentSize = typeof content === 'string'
+        ? content.length
+        : JSON.stringify(content).length;
+      if (contentSize > 5 * 1024 * 1024) {
+        return res.status(413).json({ error: "Content too large (max 5MB)" });
+      }
+
       await withReportsLock(async () => {
-        const reports = await getReportsData();
+        let reports = await getReportsData();
+        reports = pruneOldReports(reports);
         reports[reportId] = {
           id: reportId,
           content,
@@ -88,53 +135,54 @@ async function startServer() {
     try {
       const { contents, systemInstruction } = req.body;
       const clientApiKey = req.headers.authorization?.replace("Bearer ", "").trim();
-      
-      const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+      const provider = String(req.headers['x-llm-provider'] || 'gemini');
+      const model = String(req.headers['x-llm-model'] || '');
+      const baseUrl = String(req.headers['x-llm-base-url'] || '');
+      const temperature = Number(req.headers['x-llm-temperature'] || 0.2);
+
+      // 兜底：Gemini 仍允许走环境变量
+      const envFallback = provider === 'gemini' ? process.env.GEMINI_API_KEY : '';
+      const apiKey = clientApiKey || envFallback || '';
+
       if (!apiKey || apiKey === "undefined") {
         throw new Error("API_KEY_MISSING");
       }
-
-      // Allow using a custom proxy base URL for mainland China access
-      const customOptions: any = { apiKey };
-      if (process.env.GEMINI_BASE_URL) {
-        customOptions.baseUrl = process.env.GEMINI_BASE_URL;
+      if (!model && provider !== 'gemini') {
+        throw new Error("MODEL_MISSING");
       }
 
-      const ai = new GoogleGenAI(customOptions);
-      
-      const responseStream = await ai.models.generateContentStream({
-        model: "gemini-2.5-flash",
-        contents: contents,
-        config: {
-          systemInstruction: systemInstruction,
-          temperature: 0.2,
-        }
+      await callProvider(provider, {
+        contents,
+        systemInstruction,
+        apiKey,
+        model: model || 'gemini-2.5-flash',
+        baseUrl: baseUrl || undefined,
+        temperature: isNaN(temperature) ? 0.2 : temperature,
+      }, (token) => {
+        res.write(`data: ${JSON.stringify({ type: 'token', content: token })}\n\n`);
       });
 
-      for await (const chunk of responseStream) {
-        if (chunk.text) {
-          res.write(`data: ${JSON.stringify({type: 'token', content: chunk.text})}\n\n`);
-        }
-      }
       res.write("data: [DONE]\n\n");
       res.end();
-
     } catch (err: any) {
       console.error("Error from AI API:", err);
       let errorMessage = "服务器内部错误，请稍后重试。";
-      const errMessageStripped = String(err).toLowerCase() + String(err.message).toLowerCase();
+      const m = String(err?.message || err).toLowerCase();
       if (err.message === "API_KEY_MISSING") {
-         errorMessage = "未检测到有效的 Gemini API 密钥。请点击左下角设置配置您的个人 API Key。由于本服务部署于云端，配置后可支持全球无障碍访问。";
-      } else if (errMessageStripped.includes("api key not valid")) {
-        errorMessage = "您提供的 Gemini API 密钥无效，请求被拒绝。请在左下角设置中检查并更新您的 API Key。";
-      } else if (errMessageStripped.includes("429") || errMessageStripped.includes("quota")) {
-        errorMessage = "请求频率过高或超出配额限制，请稍后重试。";
-      } else if (errMessageStripped.includes("503") || errMessageStripped.includes("high demand") || errMessageStripped.includes("unavailable")) {
-        errorMessage = "当前模型由于需求过高暂时无法响应。这通常是暂时的，请您稍后重试。";
-      } else if (err.status === 503 || err.code === 503) {
-        errorMessage = "当前模型由于需求过高暂时无法响应。这通常是暂时的，请您稍后重试。";
+        errorMessage = "未检测到有效的 API 密钥。请点击左下角设置选择厂商并配置 API Key。";
+      } else if (err.message === "MODEL_MISSING") {
+        errorMessage = "未指定模型名称，请在设置面板里选择或填写一个模型。";
+      } else if (m.includes("api key") && (m.includes("invalid") || m.includes("not valid") || m.includes("incorrect"))) {
+        errorMessage = "您提供的 API 密钥无效，请检查并更新。";
+      } else if (m.includes("401") || m.includes("unauthorized")) {
+        errorMessage = "鉴权失败 (401)：API Key 错误或无权限。";
+      } else if (m.includes("429") || m.includes("quota") || m.includes("rate limit")) {
+        errorMessage = "请求频率过高或超出配额，请稍后重试。";
+      } else if (m.includes("503") || m.includes("unavailable") || m.includes("high demand")) {
+        errorMessage = "上游模型暂不可用，请稍后重试。";
+      } else if (m.includes("upstream")) {
+        errorMessage = `上游接口报错：${String(err.message).slice(0, 300)}`;
       }
-      // If headers are already sent, we could write an error event, but we'll try to just write an error data payload.
       res.write(`data: ${JSON.stringify({ type: 'error', error: errorMessage })}\n\n`);
       res.end();
     }

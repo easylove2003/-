@@ -63,7 +63,7 @@ export function DataCompare() {
     try {
       await fetchChatStream(
         [{ role: 'user', parts: [{ text: prompt }] }],
-        buildSystemPrompt('analysis') + '\n\n<confidence level="HIGH" basis="样本充足无偏" risk="低">置信度评估</confidence> 必须使用该结构输出置信度。',
+        buildSystemPrompt('analysis'),
         (chunk) => {
            setReport(prev => prev + chunk);
         },

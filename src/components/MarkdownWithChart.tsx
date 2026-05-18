@@ -4,14 +4,27 @@ import remarkGfm from 'remark-gfm';
 import { DynamicChart, ChartConfig } from './DynamicChart';
 
 export function parseTextAndChart(text: string) {
-    const chartRegex = /```chart[\s\S]*?({[\s\S]*?})[\s\S]*?```/;
+    const chartRegex = /```chart\s*([\s\S]*?)```/;
     const match = text.match(chartRegex);
     let md = text;
     let chartConfig: ChartConfig | null = null;
     if (match && match[1]) {
         md = text.replace(match[0], ''); // strip the chart block from markdown
+        let jsonStr = match[1].trim();
+        const startIdx = jsonStr.indexOf('{');
+        const endIdx = jsonStr.lastIndexOf('}');
+        if (startIdx !== -1 && endIdx !== -1) {
+            jsonStr = jsonStr.substring(startIdx, endIdx + 1);
+        }
+        
+        // Fix common LLM formatting errors
+        jsonStr = jsonStr.replace(/}\s*{/g, '},{')
+                         .replace(/]\s*\[/g, '],[')
+                         .replace(/,\s*}/g, '}')
+                         .replace(/,\s*]/g, ']');
+                         
         try { 
-            chartConfig = JSON.parse(match[1]); 
+            chartConfig = JSON.parse(jsonStr); 
         } catch(e) {
             console.error('Failed to parse Chart JSON', e);
         }

@@ -1,4 +1,5 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { getLLMConfig, getEffectiveBaseUrl, getEffectiveModel } from './llm-config';
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -56,10 +57,19 @@ Action = { id, title, owner, timeline, ice:{i,c,e}, impact, checklist?: Checklis
 { stages: { name, value, drop_pct, is_critical?: boolean }[] }
 
 [InsightCards.data]
-{ cards: { id, title, description, severity:'info'|'warn'|'critical', metric_ref? }[] }
+{ cards: { id, title, description, severity:'info'|'warn'|'critical', metric_ref?, metric?, metric_label? }[] }
+// 注：组件兼容 headline/detail 别名，但提示词输出请用 title/description 标准字段
 
 [TrendDashboard.data]
-{ chartData: object[], lines: { key: string, color: string }[], xAxisKey?: string }
+{
+  // 推荐主格式：
+  chartData?: object[],         // 每行如 { date: '2024-01', gmv: 150, uv: 80 }
+  lines?: { key: string, name: string, color?: string }[],  // key 必须与 chartData 字段名对齐
+  xAxisKey?: string,            // chartData 中的 x 轴字段名，默认 'x'
+  // 兼容备用格式：
+  series?: { name: string, points: { x: any, y: number }[], color?: string }[],
+  tableData?: object[]          // 可选：底部联动数据表
+}
 
 [CohortHeatmap.data]
 { rows: string[], cols: string[], matrix: number[][] }
@@ -84,9 +94,14 @@ export async function fetchChatStream(
 ) {
   const { includeCanvasProtocol = false } = options;
 
-  const apiKey = localStorage.getItem('gemini_api_key') || '';
+  const cfg = getLLMConfig();
   const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (apiKey) requestHeaders['Authorization'] = `Bearer ${apiKey}`;
+  if (cfg.apiKey) requestHeaders['Authorization'] = `Bearer ${cfg.apiKey}`;
+  requestHeaders['X-LLM-Provider'] = cfg.provider;
+  requestHeaders['X-LLM-Model'] = getEffectiveModel(cfg);
+  const baseUrl = getEffectiveBaseUrl(cfg);
+  if (baseUrl) requestHeaders['X-LLM-Base-Url'] = baseUrl;
+  if (cfg.temperature !== undefined) requestHeaders['X-LLM-Temperature'] = String(cfg.temperature);
 
   const finalSystemPrompt = includeCanvasProtocol
     ? systemInstructionText + CANVAS_PROTOCOL
@@ -103,28 +118,18 @@ export async function fetchChatStream(
       async onopen(response) {
         if (!response.ok) {
           let errMessage = 'Internal Server Error';
-          try { const errObj = await response.json(); errMessage = errObj.error || errMessage; } catch (e) {}
+          try { const errObj = await response.json(); errMessage = errObj.error || errMessage; } catch {}
           throw new Error(errMessage);
         }
       },
       onmessage(event) {
         if (event.data === '[DONE]') return;
         let data;
-        try {
-          data = JSON.parse(event.data);
-        } catch (e) {
-          console.error('Failed to parse SSE data', e);
-          return;
-        }
-        if (data.type === 'token') {
-          onChunk(data.content);
-        } else if (data.type === 'error') {
-          throw new Error(data.error);
-        }
+        try { data = JSON.parse(event.data); } catch { return; }
+        if (data.type === 'token') onChunk(data.content);
+        else if (data.type === 'error') throw new Error(data.error);
       },
-      onerror(err) {
-        throw err;
-      }
+      onerror(err) { throw err; }
     });
   } catch (err: any) {
     onError(err.message || 'Unknown error');

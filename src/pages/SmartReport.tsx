@@ -1,6 +1,6 @@
 // Smart Report Generation Module
-import React, { useState, useRef, useCallback } from 'react';
-import { Upload, Database, LayoutTemplate, AlertTriangle, FileText, Download, Loader2, PlayCircle, BarChart2 } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { Upload, Database, LayoutTemplate, AlertTriangle, FileText, Download, Loader2, PlayCircle, BarChart2, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../lib/LanguageContext';
 import Papa from 'papaparse';
@@ -19,6 +19,25 @@ import { fetchChatStream } from '../lib/api';
 import { exportToPDF, exportToPPT, shareReport } from '../lib/exportUtils';
 import { Share2, Presentation } from 'lucide-react';
 import { buildSystemPrompt } from '../prompts';
+import { listAllTemplates } from '../data/reportTemplates';
+import { TemplateEditor } from '../components/TemplateEditor';
+
+function splitMarkdownByH2(md: string) {
+  const parts = md.split(/(?=^## )/m);
+  if (parts.length === 0) return { before: '', sections: [] };
+  
+  const before = parts[0].startsWith('## ') ? '' : parts.shift() || '';
+  
+  const sections = parts.map(part => {
+    const lines = part.split('\n');
+    const headingLine = lines[0];
+    const heading = headingLine.replace(/^##\s*/, '').trim();
+    const body = lines.slice(1).join('\n');
+    return { heading, body };
+  });
+  
+  return { before, sections };
+}
 
 const RenderChart = ({ config }: { config: any }) => {
   if (!config || !Array.isArray(config.data) || config.data.length === 0 || !Array.isArray(config.series)) {
@@ -188,6 +207,52 @@ export function SmartReport() {
   const [error, setError] = useState<string | null>(null);
   const [confirmExport, setConfirmExport] = useState(false);
 
+  const [expressMode, setExpressMode] = useState(false);
+  const [rewritingSectionIdx, setRewritingSectionIdx] = useState<number | null>(null);
+  const [rewriteHint, setRewriteHint] = useState('');
+  const [rewriteOpen, setRewriteOpen] = useState<number | null>(null);
+  const [originalMetadata, setOriginalMetadata] = useState<any>(null);
+  const [originalRawData, setOriginalRawData] = useState<any[]>([]);
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState('standard_bi');
+  const [templates, setTemplates] = useState(() => listAllTemplates());
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+
+  const REPORT_STAGES = useMemo(() => {
+    const tpl = templates.find(t => t.id === selectedTemplateId) || templates[0];
+    return tpl.sections.map((s, i) => ({
+      id: i + 1,
+      label: s.title,
+      anchor: `## ${i + 1}.`
+    }));
+  }, [selectedTemplateId, templates]);
+
+  const reachedStageId = useMemo(() => {
+    let max = 0;
+    REPORT_STAGES.forEach(s => { if (reportMarkdown.includes(s.anchor)) max = s.id; });
+    return max;
+  }, [reportMarkdown, REPORT_STAGES]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('from') === 'data-analysis') {
+      const raw = sessionStorage.getItem('dc_pending_dataset');
+      if (raw) {
+        try {
+          const payload = JSON.parse(raw);
+          sessionStorage.removeItem('dc_pending_dataset');
+          setUploadedFileName(payload.fileName + (payload._truncated ? ' (前5000行采样)' : ''));
+          const meta = extractMetadata(payload.data, { fields: payload.columns.map((c: any) => c.key) });
+          setOriginalMetadata(meta);
+          setOriginalRawData(payload.data);
+          generateReport(meta, payload.data, false);
+        } catch (e) {
+          console.error('Restore from DataAnalysis failed', e);
+        }
+      }
+    }
+  }, []);
+
   const extractMetadata = (parsedData: any[], meta: any) => {
     if (!parsedData || parsedData.length === 0) return null;
 
@@ -264,7 +329,9 @@ export function SmartReport() {
               throw new Error(t("File parsed empty or format incorrect.", "文件解析为空或格式不正确。空文件无法分析。"));
           }
           const metadata = extractMetadata(results.data, results.meta);
-          await generateReport(metadata, results.data);
+          setOriginalMetadata(metadata);
+          setOriginalRawData(results.data);
+          await generateReport(metadata, results.data, expressMode);
         } catch (e: any) {
            setError(e.message);
            setIsAnalyzing(false);
@@ -278,20 +345,23 @@ export function SmartReport() {
     });
   };
 
-  const generateReport = async (metadata: any, rawData: any[]) => {
+  const generateReport = async (metadata: any, rawData: any[], isExpress: boolean = expressMode) => {
     setIsAnalyzing(true);
     setReportMarkdown('');
     setError(null);
 
-    const apiKey = localStorage.getItem('gemini_api_key') || '';
-    const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey) {
-      requestHeaders['Authorization'] = `Bearer ${apiKey}`;
-    }
-
     const qs = calculateQualityScore(rawData);
 
-    const sysPrompt = buildSystemPrompt('analysis') + `\n\n你也是一个企业级智能 BI 报表与看板生成引擎。用户会上传 Excel 或 CSV 数据，系统会提供字段名、字段类型、样例值、空值率、唯一值数量、数值分布和时间范围。你需要基于这些真实数据，自动识别业务场景、数据粒度、字段角色、核心指标、看板结构、图表配置、业务洞察和一句话策略。
+    const tpl = templates.find(t => t.id === selectedTemplateId) || templates[0];
+    const sectionList = tpl.sections.map((s, i) => `## ${i + 1}. ${s.title}\n（章节要点：${s.hint}）`).join('\n\n');
+
+    const sysPrompt = buildSystemPrompt('report') + `\n\n你是企业级 BI 报告引擎。本次报告必须严格按以下章节结构输出（不要增减章节，不要改章节标题）：
+
+# ${tpl.name}
+
+${sectionList}
+
+每节请给出充实内容（300-600 字 + 必要的图表 chart 代码块）。
 
 CRITICAL: You MUST respond strictly in ${lang === 'en' ? 'English' : 'Chinese'}.
 
@@ -300,7 +370,7 @@ CRITICAL: You MUST respond strictly in ${lang === 'en' ? 'English' : 'Chinese'}.
 1. 只能使用上传数据中真实存在的字段，严禁编造字段。
 2. 如果某个指标缺少必要字段，必须说明无法计算原因，并给出替代指标。
 3. 指标不能只是简单 SUM/AVG，必须贴近业务场景，覆盖规模、效率、质量、结构四类。
-4. 看板必须按照“概览、趋势、对比、结构、异常、明细、策略”的逻辑生成。
+4. 看板必须按照相应的结构逻辑生成。
 5. 每个图表必须说明图表类型、使用字段、X轴、Y轴、聚合方式、筛选字段、排序方式、联动方式和业务目的。
 6. [非常重要 - 动态图表能力]：为了让报告更直观，请你在报告的相应部分，直接插入一个 \`\`\`chart 的代码块，我们在前端将会利用 react-markdown 拦截并渲染为酷炫的高级图表面板！
 代码块内必须是一个纯JSON对象，支持的 type 与对应数据格式如下：
@@ -371,36 +441,7 @@ CRITICAL: You MUST respond strictly in ${lang === 'en' ? 'English' : 'Chinese'}.
 必须用 <confidence> XML HTML 标签，里面可以不写，也可以写。前端组件会自动捕获并渲染。
 由于你受到指令只能生成纯正的业务洞察，请主动暴露不确定性。
 
-我们在前端系统已算出本数据集的综合质量评分：${Math.round(qs.overall)}/100，存在以下问题：${qs.lowConfidenceReasons.join(', ') || '无明显问题'}。请在输出 LOW 或 MEDIUM 信心时结合这些先验信息。
-
-请按照以下结构严格使用 Markdown 格式输出：
-
-# 智能 BI 报表与看板生成结果
-
-## 1. 数据资产识别
-...
-
-## 2. 业务场景判断
-...
-
-## 3. 数据质量评估
-...
-
-## 4. 字段语义模型
-| 字段名 | 物理类型 | 逻辑角色 | 业务含义 | 基数特征 | 空值风险 | 推荐用途 |
-|---|---|---|---|---|---|---|
-...
-
-## 5. 核心指标体系
-| 指标层级 | 指标名称 | 业务定义 | 计算公式 | 依赖字段 | 是否可计算 | 替代方案 | 推荐图表 | 业务价值 |
-|---|---|---|---|---|---|---|---|---|
-...
-
-## 6. 看板布局与图表
-...
-
-## 7. 关键业务洞察与策略 (使用 ICE 评分)
-...`;
+我们在前端系统已算出本数据集的综合质量评分：${Math.round(qs.overall)}/100，存在以下问题：${qs.lowConfidenceReasons.join(', ') || '无明显问题'}。请在输出 LOW 或 MEDIUM 信心时结合这些先验信息。`;
 
     const userPrompt = `已上传文件元数据特征如下：
 
@@ -433,13 +474,58 @@ ${JSON.stringify(metadata.sampleRows, null, 2)}
     }
   };
 
+  const handleRewriteSection = async (idx: number, hint: string) => {
+    if (!originalMetadata) return;
+    setRewritingSectionIdx(idx);
+    
+    const cleanMarkdown = processConfidenceTags(reportMarkdown);
+    const sections = splitMarkdownByH2(cleanMarkdown);
+    const target = sections.sections[idx];
+    
+    const sysPrompt = buildSystemPrompt('report') + `
+你只需重写下面这一节，不要输出其他章节、不要输出主标题。
+保持原章节的 H2 标题不变（${target.heading}），但内容要根据用户 hint 调整。
+用户 hint：${hint || '请把这节写得更具体、更贴近实际业务'}
+原节内容供参考（你可以推翻重写）：
+${target.body}`;
+
+    let newSection = `## ${target.heading}\n\n`;
+    
+    await fetchChatStream(
+      [{ role: 'user', parts: [{ text: `数据元信息：${JSON.stringify(originalMetadata.columns)}` }] }],
+      sysPrompt,
+      (chunk) => {
+        newSection += chunk;
+        const newSections = [...sections.sections];
+        newSections[idx] = { heading: target.heading, body: newSection.replace(`## ${target.heading}\n\n`, '') };
+        const merged = sections.before + '\n\n' + newSections.map(s => `## ${s.heading}\n${s.body}`).join('\n\n');
+        setReportMarkdown(merged);
+      },
+      (errMsg) => setError(errMsg)
+    );
+    setRewritingSectionIdx(null);
+    setRewriteOpen(null);
+    setRewriteHint('');
+  };
+
   const MarkdownComponents: Components = {
     code({ node, inline, className, children, ...props }: any) {
       const match = /language-(\w+)/.exec(className || '');
       const isChart = match && match[1] === 'chart';
       if (!inline && isChart) {
          try {
-           const jsonStr = String(children).trim();
+           let jsonStr = String(children).trim();
+           const startIdx = jsonStr.indexOf('{');
+           const endIdx = jsonStr.lastIndexOf('}');
+           if (startIdx !== -1 && endIdx !== -1) {
+               jsonStr = jsonStr.substring(startIdx, endIdx + 1);
+           }
+           
+           // Attempt to fix common LLM JSON formatting errors
+           jsonStr = jsonStr.replace(/}\s*{/g, '},{')
+                            .replace(/]\s*\[/g, '],[')
+                            .replace(/,\s*}/g, '}')
+                            .replace(/,\s*]/g, ']');
            const config = JSON.parse(jsonStr);
            return <RenderChart config={config} />;
          } catch (e) {
@@ -473,6 +559,12 @@ ${JSON.stringify(metadata.sampleRows, null, 2)}
 
         {/* Header */}
         <header className="flex flex-col gap-6 w-full max-w-4xl pt-8">
+           {new URL(window.location.href).searchParams.get('from') === 'data-analysis' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-widest rounded-full mb-4 w-max">
+                <FileText className="w-3 h-3" />
+                📨 从数据探索作战室继承数据集
+              </span>
+           )}
            <div className="flex items-center gap-3">
              <span className="w-10 h-10 bg-[#FF3B00] rounded-xl flex items-center justify-center shrink-0">
                <LayoutTemplate className="w-5 h-5 text-white" />
@@ -491,6 +583,47 @@ ${JSON.stringify(metadata.sampleRows, null, 2)}
             animate={{ opacity: 1, y: 0 }}
             className="w-full flex flex-col items-center"
           >
+             <div className="w-full max-w-2xl flex items-center justify-center gap-3 mb-4 hidden">
+               <button
+                 onClick={() => setExpressMode(false)}
+                 className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${!expressMode ? 'bg-[#0F0F0F] text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-200'}`}
+               >
+                 完整模式（7 段 · 60s+）
+               </button>
+               <button
+                 onClick={() => setExpressMode(true)}
+                 className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${expressMode ? 'bg-[#FF3B00] text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-200'}`}
+               >
+                 ⚡ Express 模式（3 段 · 15s）
+               </button>
+             </div>
+
+             <div className="w-full max-w-2xl mb-4">
+               <label className="block text-xs font-bold text-gray-700 mb-2">📋 报告模板</label>
+               <div className="flex gap-2 items-center">
+                 <select
+                   value={selectedTemplateId}
+                   onChange={(e) => setSelectedTemplateId(e.target.value)}
+                   className="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none"
+                 >
+                   {templates.map(t => (
+                     <option key={t.id} value={t.id}>
+                       {t.name}{t.isBuiltIn ? '（内置）' : '（自定义）'} — {t.sections.length} 段
+                     </option>
+                   ))}
+                 </select>
+                 <button
+                   onClick={() => setShowTemplateEditor(true)}
+                   className="px-3 py-2 text-xs bg-gray-900 text-white rounded-xl hover:bg-gray-700 font-bold"
+                 >
+                   ✏️ 自定义
+                 </button>
+               </div>
+               <p className="text-[10px] text-gray-500 mt-1">
+                 提示：不同模板会改变报告章节结构与重点
+               </p>
+             </div>
+
              <div 
                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                onDragLeave={() => setIsDragging(false)}
@@ -527,7 +660,7 @@ ${JSON.stringify(metadata.sampleRows, null, 2)}
         )}
 
         {/* Loading / Generating State */}
-        {isAnalyzing && (
+        {isAnalyzing && !reportMarkdown && (
            <motion.div 
              initial={{ opacity: 0 }}
              animate={{ opacity: 1 }}
@@ -538,11 +671,16 @@ ${JSON.stringify(metadata.sampleRows, null, 2)}
                  <Database className="w-5 h-5 text-gray-400" />
               </div>
               <h3 className="text-2xl font-serif italic text-gray-900 mb-4 animate-pulse">Architecting BI Dashboard...</h3>
-              <ul className="space-y-4 text-sm font-mono text-gray-500 flex flex-col items-center opacity-80">
-                <li className="flex items-center gap-2"><span>[1/6]</span> Profiling Dataset Schema...</li>
-                <li className="flex items-center gap-2"><span>[2/6]</span> Identifying Semantic Scenarios...</li>
-                <li className="flex items-center gap-2"><span>[3/6]</span> Constructing MECE KPI Trees...</li>
-                <li className="flex items-center gap-2 text-[#FF3B00] animate-pulse">Running Deep Analytics Engine...</li>
+              <ul className="space-y-4 text-sm font-mono flex flex-col items-center opacity-80">
+                {REPORT_STAGES.map(s => {
+                  const isDone = s.id <= reachedStageId;
+                  const isCurrent = s.id === reachedStageId + 1;
+                  return (
+                    <li key={s.id} className={`flex items-center gap-2 ${isDone ? 'text-green-600' : isCurrent ? 'text-orange-500 animate-pulse font-bold' : 'text-gray-400'}`}>
+                      <span>[{s.id}/{REPORT_STAGES.length}]</span> {s.label}
+                    </li>
+                  );
+                })}
               </ul>
            </motion.div>
         )}
@@ -562,12 +700,48 @@ ${JSON.stringify(metadata.sampleRows, null, 2)}
         )}
 
         {/* Results */}
-        {reportMarkdown && !isAnalyzing && (
+        {reportMarkdown && (
            <motion.div 
              initial={{ opacity: 0, y: 20 }}
              animate={{ opacity: 1, y: 0 }}
              className="grid grid-cols-1 xl:grid-cols-12 gap-8"
            >
+              {expressMode && !isAnalyzing && (
+                <div className="bg-amber-100/50 border border-amber-200 text-amber-900 rounded-2xl p-4 mb-6 flex items-center justify-between shadow-sm xl:col-span-12">
+                   <div className="flex items-center gap-2">
+                     <Zap className="w-5 h-5 text-amber-500" />
+                     <span className="font-medium text-sm">这是快速预览版。你可以基于此确认数据方向。</span>
+                   </div>
+                   <button 
+                     onClick={() => { setExpressMode(false); generateReport(originalMetadata, originalRawData, false); }} 
+                     className="px-4 py-2 bg-white rounded-lg text-sm font-bold border border-amber-300 hover:bg-amber-50 transition-colors shadow-sm"
+                   >
+                     升级到完整报告 (7 段结构)
+                   </button>
+                </div>
+              )}
+
+              {isAnalyzing && rewritingSectionIdx === null && (
+                 <div className="bg-[#0F0F0F] rounded-2xl p-4 shadow-xl flex items-center justify-between xl:col-span-12 sticky top-4 z-50">
+                    <div className="flex items-center gap-3">
+                       <Loader2 className="w-5 h-5 text-[#FF3B00] animate-spin" />
+                       <span className="text-white font-mono text-sm tracking-widest uppercase">Generating...</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                       {REPORT_STAGES.map(s => {
+                          const isDone = s.id <= reachedStageId;
+                          const isCurrent = s.id === reachedStageId + 1;
+                          return (
+                            <div key={s.id} className="flex items-center gap-2">
+                               <div className={`w-2 h-2 rounded-full ${isDone ? 'bg-green-500' : isCurrent ? 'bg-[#FF3B00] animate-pulse' : 'bg-gray-600'}`}></div>
+                               <span className={`text-[10px] font-mono hidden md:inline-block ${isDone ? 'text-green-500' : isCurrent ? 'text-white' : 'text-gray-500'}`}>{s.label}</span>
+                            </div>
+                          );
+                       })}
+                    </div>
+                 </div>
+              )}
+
               <div id="report-content-panel" className="xl:col-span-9 bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden">
                  <div className="bg-[#0F0F0F] text-[#F5F4F0] px-8 py-6 flex items-center justify-between sticky top-0 z-10 shadow-md">
                    <div className="flex items-center gap-3">
@@ -577,6 +751,13 @@ ${JSON.stringify(metadata.sampleRows, null, 2)}
                        <p className="font-mono text-[10px] text-gray-400 mt-1 uppercase tracking-widest">Dataset: {uploadedFileName}</p>
                      </div>
                    </div>
+                   {!isAnalyzing && (
+                     <div className="hidden md:flex gap-1.5 opacity-50">
+                        {REPORT_STAGES.map(s => (
+                           <div key={s.id} className="w-1.5 h-1.5 rounded-full bg-white transition-opacity" title={s.label}></div>
+                        ))}
+                     </div>
+                   )}
                  </div>
                  
                  <div className="p-8 lg:p-12 prose prose-slate prose-lg max-w-none 
@@ -591,9 +772,65 @@ ${JSON.stringify(metadata.sampleRows, null, 2)}
                     prose-li:marker:text-[#FF3B00]
                     prose-strong:font-semibold prose-strong:text-gray-900"
                  >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={MarkdownComponents}>
-                       {processConfidenceTags(reportMarkdown)}
-                    </ReactMarkdown>
+                    {isAnalyzing && rewritingSectionIdx === null ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={MarkdownComponents}>
+                         {processConfidenceTags(reportMarkdown)}
+                      </ReactMarkdown>
+                    ) : (() => {
+                        const sections = splitMarkdownByH2(processConfidenceTags(reportMarkdown));
+                        return (
+                          <>
+                             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={MarkdownComponents}>
+                               {sections.before}
+                             </ReactMarkdown>
+                             {sections.sections.map((sec, idx) => (
+                               <div key={idx} className={`relative mb-8 ${rewritingSectionIdx === idx ? 'bg-orange-50 rounded-xl p-4' : ''}`}>
+                                  <div className="flex items-center justify-between group">
+                                     <h2 className="text-2xl mt-12 mb-6 pb-2 border-b border-gray-100 font-serif font-normal tracking-tight flex-1">
+                                       {sec.heading}
+                                     </h2>
+                                     {!isAnalyzing && (
+                                       <button onClick={() => setRewriteOpen(rewriteOpen === idx ? null : idx)} className="opacity-0 group-hover:opacity-100 transition-opacity ml-4 text-xs font-medium text-gray-500 hover:text-[#FF3B00] flex items-center gap-1 bg-gray-50 hover:bg-orange-50 px-2 py-1 rounded">
+                                          ✏️ 重写本节
+                                       </button>
+                                     )}
+                                  </div>
+                                  
+                                  <AnimatePresence>
+                                     {rewriteOpen === idx && rewritingSectionIdx !== idx && (
+                                       <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} exit={{opacity:0, height:0}} className="overflow-hidden mb-6">
+                                          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col gap-3">
+                                             <textarea 
+                                               value={rewriteHint}
+                                               onChange={e => setRewriteHint(e.target.value)}
+                                               placeholder="请输入修改意见，例如：将这部分写得更具体、补充转化漏斗相关说明..."
+                                               className="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3B00]"
+                                               rows={3}
+                                             />
+                                             <div className="flex justify-end gap-2">
+                                                <button onClick={() => setRewriteOpen(null)} className="px-4 py-2 text-xs font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">取消</button>
+                                                <button onClick={() => handleRewriteSection(idx, rewriteHint)} className="px-4 py-2 text-xs font-bold text-white bg-[#0F0F0F] hover:bg-[#FF3B00] rounded-lg transition-colors shadow-md">确认重写</button>
+                                             </div>
+                                          </div>
+                                       </motion.div>
+                                     )}
+                                  </AnimatePresence>
+                                  
+                                  {rewritingSectionIdx === idx ? (
+                                     <div className="flex flex-col items-center justify-center p-8 text-orange-500">
+                                        <Loader2 className="w-8 h-8 animate-spin mb-2" />
+                                        <span className="text-xs font-mono font-medium tracking-widest uppercase">Rewriting Section...</span>
+                                     </div>
+                                  ) : (
+                                     <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={MarkdownComponents}>
+                                        {sec.body}
+                                     </ReactMarkdown>
+                                  )}
+                               </div>
+                             ))}
+                          </>
+                        );
+                    })()}
                  </div>
               </div>
 
@@ -689,6 +926,14 @@ ${JSON.stringify(metadata.sampleRows, null, 2)}
         )}
 
       </div>
+
+      {showTemplateEditor && (
+        <TemplateEditor 
+          onClose={() => setShowTemplateEditor(false)}
+          onSaved={() => setTemplates(listAllTemplates())}
+        />
+      )}
+
     </div>
   );
 }

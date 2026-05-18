@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, User, Settings, RefreshCw, AlertCircle, Maximize2, X, BrainCircuit, Activity, LayoutTemplate, FileText, ChevronRight, Zap, Database, Terminal, LineChart, PieChart, MessageSquare, Blocks, Paperclip } from 'lucide-react';
+import { Send, Sparkles, User, Settings, RefreshCw, AlertCircle, Maximize2, X, BrainCircuit, Activity, LayoutTemplate, FileText, ChevronRight, Zap, Database, Terminal, LineChart, PieChart, MessageSquare, Blocks, Paperclip, ChevronDown, ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../lib/LanguageContext';
@@ -11,6 +11,7 @@ import { useCanvasStore } from '../lib/canvas-engine/orchestrator';
 import { parseCanvasDirective } from '../lib/canvas-engine/parser';
 import { DynamicCanvas } from '../components/canvas/DynamicCanvas';
 import { interactionBus } from '../lib/canvas-engine/interaction-bus';
+import { PROVIDERS, getLLMConfig, saveLLMConfig, getProviderMeta, type LLMConfig } from '../lib/llm-config';
 
 export function AIAssistant() {
   const { t, lang } = useLanguage();
@@ -23,7 +24,8 @@ export function AIAssistant() {
   const store = useCanvasStore();
 
   const [showSettings, setShowSettings] = useState(false);
-  const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [llmCfg, setLlmCfg] = useState<LLMConfig>(getLLMConfig());
+  const currentMeta = getProviderMeta(llmCfg.provider);
 
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -67,9 +69,19 @@ export function AIAssistant() {
     return () => interactionBus.off('interaction', handleInteraction);
   }, [messages, isTyping]);
 
-  const handleSaveApiKey = () => {
-    localStorage.setItem('gemini_api_key', apiKey);
+  const handleSaveLLMConfig = () => {
+    saveLLMConfig(llmCfg);
     setShowSettings(false);
+  };
+
+  const handleProviderChange = (id: any) => {
+    const meta = getProviderMeta(id);
+    setLlmCfg({
+      provider: id,
+      apiKey: '',
+      baseUrl: meta.defaultBaseUrl,
+      model: meta.defaultModel,
+    });
   };
 
   const handleAction = (action: string) => {
@@ -126,9 +138,6 @@ export function AIAssistant() {
 
     try {
       const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (apiKey) {
-        requestHeaders['Authorization'] = `Bearer ${apiKey}`;
-      }
 
       let systemPromptText = buildSystemPrompt('assistant');
       if (uploadedData && uploadedData.length > 0) {
@@ -164,11 +173,26 @@ export function AIAssistant() {
         parts: [{ text: m.content }]
       }));
 
-      if (formattedHistory.length > 10) {
-         // keep last 10, add a "System Note: Previous conversation context is omitted for brevity." at the beginning
-         formattedHistory = formattedHistory.slice(-10);
-         systemPromptText += `\n\n[SYSTEM NOTE: The user has had a long conversation. Only the most recent 5 turns are included below. Older context is compressed/omitted.]`;
+      // 按字符数估算 token（粗略 1 字符 ≈ 0.5-1 token），保留累计 ≤ 80k 字符的最近消息
+      // 同时硬限制最多 20 条避免极端情况
+      const MAX_HISTORY_CHARS = 80000;
+      const MAX_HISTORY_MESSAGES = 20;
+      let cumChars = 0;
+      const truncatedHistory: ChatMessage[] = [];
+      for (let i = formattedHistory.length - 1; i >= 0; i--) {
+        const msgChars = formattedHistory[i].parts.reduce((sum, p) => sum + (p.text?.length || 0), 0);
+        if (truncatedHistory.length >= MAX_HISTORY_MESSAGES || cumChars + msgChars > MAX_HISTORY_CHARS) {
+          break;
+        }
+        cumChars += msgChars;
+        truncatedHistory.unshift(formattedHistory[i]);
       }
+
+      if (truncatedHistory.length < formattedHistory.length) {
+        const omitted = formattedHistory.length - truncatedHistory.length;
+        systemPromptText += `\n\n[SYSTEM NOTE: Conversation history is too long. The earliest ${omitted} message(s) have been omitted to fit context window. Only the recent ${truncatedHistory.length} messages are included.]`;
+      }
+      formattedHistory = truncatedHistory;
 
       // Add the current user query
       formattedHistory.push({ role: 'user', parts: [{ text: val }] });
@@ -250,6 +274,14 @@ export function AIAssistant() {
             <span className="font-serif italic font-bold text-lg text-[#1A1A1A]">Data Copilot</span>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSettings(true)}
+              className="text-[10px] font-mono bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-full flex items-center gap-1.5"
+              title="点击切换 Provider"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {currentMeta.name} · {llmCfg.model || currentMeta.defaultModel}
+            </button>
             <span className="flex items-center gap-1.5 px-2 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-mono font-bold uppercase tracking-widest border border-emerald-300">
                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> LLM Online
             </span>
@@ -324,62 +356,170 @@ export function AIAssistant() {
       </div>
 
       {/* Settings Modal */}
-      <AnimatePresence>
-        {showSettings && (
-          <motion.div 
-            initial={{opacity: 0}}
-            animate={{opacity: 1}}
-            exit={{opacity: 0}}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F0F0F]/20 backdrop-blur-sm p-4"
+      {showSettings && (
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4"
+            onClick={() => setShowSettings(false)}
           >
-            <motion.div 
-              initial={{scale: 0.95, opacity: 0}}
-              animate={{scale: 1, opacity: 1}}
-              exit={{scale: 0.95, opacity: 0}}
-              className="bg-white border-2 border-[#0F0F0F] shadow-[8px_8px_0_#0F0F0F] p-6 w-full max-w-md relative"
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
             >
-              <button 
-                onClick={() => setShowSettings(false)}
-                className="absolute right-4 top-4 text-gray-500 hover:text-gray-900 transition-colors"
-               >
-                <X className="w-5 h-5" />
-              </button>
-              <h2 className="text-xl font-serif italic font-bold mb-2 flex items-center gap-2 text-[#0F0F0F]">
-                <Settings className="w-5 h-5"/>
-                API Key Configuration
-              </h2>
-              <p className="text-sm text-gray-600 mb-6 font-medium">配置您的个人 Gemini API Key，您的 Key 将安全地存储在本地浏览器中。</p>
-              
-              <div className="space-y-4">
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-mono font-bold text-gray-900 mb-2 uppercase tracking-widest">Gemini API Key</label>
-                  <input 
-                    type="password" 
-                    value={apiKey}
-                    onChange={e => setApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full border-2 border-[#0F0F0F] p-3 focus:outline-none focus:ring-0 font-mono text-sm bg-[#F5F4F0]"
+                  <h2 className="text-xl font-bold text-gray-900">大模型 Provider 配置</h2>
+                  <p className="text-xs text-gray-500 mt-1">支持任意厂商：Gemini / OpenAI / Claude / DeepSeek / Kimi / GLM / Qwen / Ollama 等</p>
+                </div>
+                <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Provider 网格选择 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3">① 选择 Provider</label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {PROVIDERS.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleProviderChange(p.id)}
+                        className={`relative px-3 py-3 rounded-xl border text-left transition-all ${
+                          llmCfg.provider === p.id
+                            ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-gray-800">{p.name}</span>
+                          {p.free && (
+                            <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold">FREE</span>
+                          )}
+                        </div>
+                        {p.hint && <p className="text-[10px] text-gray-500 mt-1 line-clamp-1">{p.hint}</p>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* API Key */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-bold text-gray-700">② API Key</label>
+                    {currentMeta.apiKeyHelpUrl && (
+                      <a href={currentMeta.apiKeyHelpUrl} target="_blank" rel="noreferrer"
+                         className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                        获取 Key <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    value={llmCfg.apiKey}
+                    onChange={e => setLlmCfg({ ...llmCfg, apiKey: e.target.value })}
+                    placeholder={llmCfg.provider === 'ollama' ? '本地 Ollama 任意填写 (如 ollama)' : '粘贴你的 API Key'}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Key 仅保存在浏览器本地（localStorage），不会上传到任何服务器。
+                  </p>
                 </div>
-                <div className="flex justify-end gap-3 pt-4">
-                  <button 
-                    onClick={() => setShowSettings(false)}
-                    className="px-5 py-2 border-2 border-[#0F0F0F] hover:bg-[#F5F4F0] text-sm font-bold transition-colors font-mono uppercase tracking-widest text-[#0F0F0F]"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={handleSaveApiKey}
-                    className="px-5 py-2 bg-[#0F0F0F] text-white hover:bg-gray-800 text-sm font-bold shadow-[4px_4px_0_#0F0F0F] active:translate-y-px active:shadow-none transition-all font-mono uppercase tracking-widest"
-                  >
-                    Save Key
-                  </button>
+
+                {/* 模型 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">③ 模型</label>
+                  {currentMeta.modelOptions.length > 0 ? (
+                    <div className="flex gap-2 flex-wrap">
+                      {currentMeta.modelOptions.map(m => (
+                        <button
+                          key={m}
+                          onClick={() => setLlmCfg({ ...llmCfg, model: m })}
+                          className={`px-3 py-2 rounded-lg text-xs font-mono border transition-all ${
+                            (llmCfg.model || currentMeta.defaultModel) === m
+                              ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                      <input
+                        type="text"
+                        value={llmCfg.model || ''}
+                        onChange={e => setLlmCfg({ ...llmCfg, model: e.target.value })}
+                        placeholder="或自定义模型名"
+                        className="flex-1 min-w-[180px] px-3 py-2 border border-gray-200 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={llmCfg.model || ''}
+                      onChange={e => setLlmCfg({ ...llmCfg, model: e.target.value })}
+                      placeholder="填写模型名（如 gpt-4o-mini）"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-mono"
+                    />
+                  )}
                 </div>
+
+                {/* 高级：BaseURL + 温度 */}
+                <details className="group">
+                  <summary className="text-sm font-bold text-gray-700 cursor-pointer flex items-center gap-2">
+                    <ChevronDown className="w-4 h-4 group-open:rotate-180 transition-transform" />
+                    高级设置（BaseURL / 温度）
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">BaseURL（留空使用默认）</label>
+                      <input
+                        type="text"
+                        value={llmCfg.baseUrl || ''}
+                        onChange={e => setLlmCfg({ ...llmCfg, baseUrl: e.target.value })}
+                        placeholder={currentMeta.defaultBaseUrl || '自定义 OpenAI 兼容接口地址'}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Temperature: {llmCfg.temperature ?? 0.2}
+                      </label>
+                      <input
+                        type="range"
+                        min="0" max="1" step="0.1"
+                        value={llmCfg.temperature ?? 0.2}
+                        onChange={e => setLlmCfg({ ...llmCfg, temperature: Number(e.target.value) })}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+              <div className="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50">
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveLLMConfig}
+                  className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700"
+                >
+                  保存配置
+                </button>
               </div>
             </motion.div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </AnimatePresence>
+      )}
 
       {/* 主工作区：动态画布 (Dynamic Canvas) */}
       <div className="hidden md:flex flex-1 bg-[#E5E5E5] relative overflow-hidden flex-col h-full">

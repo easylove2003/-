@@ -8,11 +8,12 @@ import * as ss from 'simple-statistics';
 import * as XLSX from 'xlsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { exampleDatasets } from '../data/exampleDatasets';
 import { MarkdownWithChart } from '../components/MarkdownWithChart';
 import { ThinkingProcess } from '../components/ThinkingProcess';
 import { fetchChatStream } from '../lib/api';
 import { buildSystemPrompt } from '../prompts';
+import { registerJsonAsTable, runSQL, describeTable } from '../lib/duckdb-engine';
+import { WorkflowStepper } from '../components/WorkflowStepper';
 
 export function DataAnalysis() {
   const { t, lang } = useLanguage();
@@ -40,6 +41,10 @@ export function DataAnalysis() {
   const [activeMethodology, setActiveMethodology] = useState<{title: string, desc: string} | null>(null);
   const [analysisResult, setAnalysisResult] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // New Upgrade States
+  const [expressMode, setExpressMode] = useState(false);
+  const [anomalies, setAnomalies] = useState<any[]>([]);
 
   // Onboarding State
   const [showWelcome, setShowWelcome] = useState(false);
@@ -73,22 +78,31 @@ export function DataAnalysis() {
     }
   }, [showWelcome, typingIndex]);
 
-  const SYSTEM_PROMPT = buildSystemPrompt('profiling') + `\n\n- CRITICAL: You MUST respond strictly in ${lang === 'en' ? 'English' : 'Chinese'}.
+  const buildSysPrompt = (isExpress: boolean) => {
+    let base = buildSystemPrompt('profiling') + `\n\n- CRITICAL: You MUST respond strictly in ${lang === 'en' ? 'English' : 'Chinese'}.
 - 每次输出分析结论时，必须在结论后附加一个JSON代码块，格式如下（数据直接从用户上传的数据集中提取真实数值，不得编造）：
 \`\`\`chart
 {"chartType":"bar","title":"渠道逾期率对比","xKey":"channel","yKey":"overdue_rate","data":[{"channel":"渠道A","overdue_rate":0.05}],"insight":"A渠道逾期率比均值高47%"}
 \`\`\`
 - 自动选择最优图表：趋势用line，分类用bar，占比用pie(最多6类合并others)，探索两连续变量相关性用scatter，漏斗路径分析用funnel。
-- 在每次深度分析前，先输出思维过程，格式严格如下（必须放在分析结论之前）：
+- 附带置信度自我评估: <confidence level="HIGH" basis="样本充足无偏" risk="低">置信度评估</confidence> 必须使用该标签。
+- 在 NL2SQL 模式下，所有数字必须来自上文实际查询结果，不允许编造。
+`;
+
+    if (isExpress) {
+      base += `\n【极速模式法则】\n- 严禁输出 <thinking> 思维过程。\n- 报告总字数控制在 400 字以内，快速给出最重要的 1 个数据质量发现和 1 个业务洞察即可。\n`;
+    } else {
+      base += `\n- 在每次深度分析前，先输出思维过程，格式严格如下（必须放在分析结论之前）：
 <thinking>
 STEP1: [正在做什么，如：检查数据质量，发现空值率X%]
 STEP2: [正在做什么，如：计算渠道间逾期率差异]
 STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
-</thinking>
-- 附带置信度自我评估: <confidence level="HIGH" basis="样本充足无偏" risk="低">置信度评估</confidence> 必须使用该标签。
-`;
+</thinking>\n`;
+    }
+    return base;
+  };
 
-  const runFullDiagnostic = async (data: any[], cols: any[], stats: any, fname: string) => {
+  const runFullDiagnostic = async (data: any[], cols: any[], stats: any, fname: string, isExpress: boolean = expressMode) => {
     setIsDiagnosing(true);
     setMainDiagnosticReport('');
     
@@ -103,16 +117,12 @@ STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
        samples: sampleRows
     };
 
-    const apiKey = localStorage.getItem('gemini_api_key') || '';
-    const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey) requestHeaders['Authorization'] = `Bearer ${apiKey}`;
-
     const prompt = `数据已接收。请根据【全局系统设定】的要求，立即对此数据集（${fname}，共${data.length}行）进行第一阶段的「全维度数据质量诊断」和「阶段特征报告」。\n\n数据元特征信息:\n${JSON.stringify(dataContext, null, 2)}`;
 
     try {
       await fetchChatStream(
         [{ role: 'user', parts: [{ text: prompt }] }],
-        SYSTEM_PROMPT,
+        buildSysPrompt(isExpress),
         (chunk) => {
            setMainDiagnosticReport(prev => prev + chunk);
         },
@@ -135,50 +145,84 @@ STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
     setChatHistory(prev => [...prev, { role: 'user', text: query }]);
     setIsChatting(true);
 
-    const contextStr = `字段:${columns.map(c=>c.key).join(',')}\n当前已知数据状态:${JSON.stringify(columnStats).slice(0, 500)}...`;
+    // === Step 1: 拿真实表结构 ===
+    let schema: {field: string, type: string}[] = [];
+    try { schema = await describeTable('dataset'); } catch {}
 
-    setChatHistory(prev => [...prev, { role: 'model', text: '' }]);
-    
-    // Create reference to current history for building the request
-    const requestContents = [
-      ...chatHistory.map(h => ({ role: h.role as 'user'|'model', parts: [{ text: h.text }] })),
-      { role: 'user' as const, parts: [{ text: `数据集上下文:\n${contextStr}\n\n我的查询/指令：${query}\n\n请作为智能分析内核给出精准回答、计算结论或建议。如果属于SQL/Python操作可直接生成代码片段。` }] }
-    ];
+    // === Step 2: 让 LLM 写 SQL ===
+    setChatHistory(prev => [...prev, { role: 'model', text: '⏳ 正在生成 SQL 查询...' }]);
 
-    try {
-      await fetchChatStream(requestContents, SYSTEM_PROMPT, 
-        (chunk) => {
-          setChatHistory(prev => {
-             const newH = [...prev];
-             newH[newH.length - 1].text += chunk;
-             return newH;
-          });
-        },
-        (errMsg) => {
-          setChatHistory(prev => {
-             const newH = [...prev];
-             newH[newH.length - 1].text += `\n\n**Error:** ${errMsg}`;
-             return newH;
-          });
-        }
-      );
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsChatting(false);
+    const sqlPrompt = `你是 DuckDB SQL 专家。表名固定为 dataset。
+表结构：${JSON.stringify(schema)}
+用户问题：${query}
+
+请只输出一段 DuckDB SQL（不要解释、不要代码块标记），LIMIT 默认 100。
+如果问题无法用 SQL 回答（如纯概念解释），输出单词 NOSQL。`;
+
+    let sqlText = '';
+    await fetchChatStream(
+      [{ role: 'user', parts: [{ text: sqlPrompt }] }],
+      'You are a DuckDB SQL generator. Output only SQL or the literal word NOSQL.',
+      (chunk) => { sqlText += chunk; },
+      (errMsg) => { sqlText = ''; }
+    );
+    sqlText = sqlText.replace(/```sql|```/g, '').trim();
+
+    // === Step 3: 跑 SQL ===
+    let sqlResult: any = null;
+    let executionBlock = '';
+    if (sqlText && sqlText !== 'NOSQL' && /^(SELECT|WITH)/i.test(sqlText)) {
+      sqlResult = await runSQL(sqlText);
+      const preview = sqlResult.error
+        ? `❌ SQL 执行失败：${sqlResult.error}`
+        : `✅ 返回 ${sqlResult.rowCount} 行（${sqlResult.elapsedMs}ms）`;
+      executionBlock = `\n\n**📋 执行 SQL：**\n\`\`\`sql\n${sqlText}\n\`\`\`\n\n${preview}\n`;
+      if (!sqlResult.error && sqlResult.rowCount > 0) {
+        executionBlock += `\n**前 10 行结果：**\n\`\`\`json\n${JSON.stringify(sqlResult.rows.slice(0, 10), null, 2)}\n\`\`\`\n`;
+      }
     }
+
+    // === Step 4: 用真实结果再让 LLM 写洞察（流式） ===
+    setChatHistory(prev => {
+      const newH = [...prev];
+      newH[newH.length - 1] = { role: 'model', text: executionBlock };
+      return newH;
+    });
+
+    const insightPrompt = sqlResult && !sqlResult.error
+      ? `基于以下真实查询结果，回答用户问题"${query}"。
+SQL：${sqlText}
+返回行数：${sqlResult.rowCount}
+结果（前30行）：${JSON.stringify(sqlResult.rows.slice(0, 30))}
+
+请输出：1) 一句直接结论 2) 1-2 个关键数字解读 3) 一个推荐图表（直接生成 \`\`\`chart 代码块，xKey/yKey 必须是上面 SQL 返回的真实列名，data 直接用上面结果）。`
+      : `用户问题"${query}"无法直接通过 SQL 回答。请用通用分析方法解答，引用已有 schema：${JSON.stringify(schema)}`;
+
+    await fetchChatStream(
+      [{ role: 'user', parts: [{ text: insightPrompt }] }],
+      buildSysPrompt(false),
+      (chunk) => {
+        setChatHistory(prev => {
+          const newH = [...prev];
+          newH[newH.length - 1].text += chunk;
+          return newH;
+        });
+      },
+      (errMsg) => {
+        setChatHistory(prev => {
+          const newH = [...prev];
+          newH[newH.length - 1].text += `\n\n**Error:** ${errMsg}`;
+          return newH;
+        });
+      }
+    );
+    setIsChatting(false);
   };
 
   const handleMethodologyClick = async (title: string, desc: string) => {
     setActiveMethodology({ title, desc });
     setAnalysisResult('');
     setIsAnalyzing(true);
-
-    const apiKey = localStorage.getItem('gemini_api_key') || '';
-    const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey) {
-      requestHeaders['Authorization'] = `Bearer ${apiKey}`;
-    }
 
     const dataSummary = {
       totalRows: parsedData.length,
@@ -191,7 +235,7 @@ STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
     try {
       await fetchChatStream(
         [{ role: 'user', parts: [{ text: prompt }] }],
-        buildSystemPrompt('analysis') + '\n\n<confidence level="HIGH" basis="样本充足无偏" risk="低">置信度评估</confidence>必须使用这个结构。',
+        buildSystemPrompt('analysis'),
         (chunk) => {
            setAnalysisResult(prev => prev + chunk);
         },
@@ -244,12 +288,24 @@ STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
   const processData = (data: any[], file: File) => {
     if (!data || data.length === 0) return;
     
-    const sample = data[0];
+    // Create copy & limit to 50k rows for client side
+    let processedData = data;
+    let _truncated = false;
+    if (processedData.length > 50000) {
+      processedData = processedData.slice(0, 50000);
+      _truncated = true;
+    }
+
+    const sample = processedData[0];
+    const detectedAnomalies: any[] = [];
+    
     const cols = Object.keys(sample).map(key => {
       // Basic type inference & Null Check
-      const vals = data.map(d => d[key]);
+      const vals = processedData.map(d => d[key]);
       const validVals = vals.filter(v => v !== null && v !== undefined && v !== '');
       const missingCount = vals.length - validVals.length;
+      const missingRateNum = (missingCount / processedData.length) * 100;
+      
       const isNumeric = validVals.length > 0 && validVals.slice(0, 100).every(v => !isNaN(Number(v)));
       const isDate = validVals.length > 0 && validVals.slice(0, 100).some(v => typeof v === 'string' && /^\d{4}[-/]\d{2}[-/]\d{2}/.test(v));
       const uniqueVals = new Set(validVals.slice(0, 1000)).size;
@@ -260,48 +316,87 @@ STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
       else if (uniqueVals <= 20 && validVals.length > 100) inferredType = 'CATEGORICAL-LOW';
       else if (uniqueVals > 20 && uniqueVals < 500) inferredType = 'CATEGORICAL-HIGH';
 
+      if (missingRateNum > 50) {
+        detectedAnomalies.push({ type: 'danger', field: key, msg: `缺失值超过 50% (${missingRateNum.toFixed(1)}%)，可能影响分析` });
+      } else if (missingRateNum > 20) {
+        detectedAnomalies.push({ type: 'warning', field: key, msg: `存在 ${missingRateNum.toFixed(1)}% 缺失值，建议清洗` });
+      }
+
+      if (inferredType === 'TEXT-FREE' && uniqueVals > 500 && validVals.length > 1000) {
+         detectedAnomalies.push({ type: 'warning', field: key, msg: '基数过高的自由文本，推荐使用 NER 实体提取' });
+      }
+
       return {
         key,
         type: inferredType,
-        missingRate: (missingCount / data.length * 100).toFixed(1) + '%',
+        missingRate: missingRateNum.toFixed(1) + '%',
       };
     });
 
     // Compute basic stats
     const stats: any = {};
     cols.filter(c => c.type === 'NUMERIC').forEach(c => {
-      const numVals = data.map(d => Number(d[c.key])).filter(v => !isNaN(v));
+      const numVals = processedData.map(d => Number(d[c.key])).filter(v => !isNaN(v));
       if (numVals.length > 0) {
+        let std = 0, mean = 0, minVal = 0, maxVal = 0;
+        try {
+          minVal = ss.min(numVals);
+          maxVal = ss.max(numVals);
+          mean = ss.mean(numVals);
+          std = ss.standardDeviation(numVals);
+          
+          let zeros = 0;
+          let negatives = 0;
+          numVals.forEach(v => {
+            if (v === 0) zeros++;
+            if (v < 0) negatives++;
+          });
+          
+          if (zeros / numVals.length > 0.8) {
+             detectedAnomalies.push({ type: 'warning', field: c.key, msg: '超过 80% 的值为 0，请确认是否为稀疏矩阵或记录缺失' });
+          }
+          if (c.key.toLowerCase().includes('price') || c.key.toLowerCase().includes('amount') || c.key.toLowerCase().includes('sales')) {
+             if (negatives > 0) detectedAnomalies.push({ type: 'danger', field: c.key, msg: `金额/价格类字段存在 ${negatives} 个负数` });
+          }
+          
+        } catch(e) {}
+        
         stats[c.key] = {
-          min: ss.min(numVals),
-          max: ss.max(numVals),
-          mean: ss.mean(numVals).toFixed(2),
-          std: ss.standardDeviation(numVals).toFixed(2),
+          min: minVal,
+          max: maxVal,
+          mean: mean.toFixed(2),
+          std: std.toFixed(2),
           uniqueApproximation: new Set(numVals.slice(0,100)).size
         };
       }
     });
 
-    setParsedData(data);
+    // Complete processData cleanly
+    setParsedData(processedData);
     setColumns(cols);
     setColumnStats(stats);
-    setFileName(file.name);
+    setFileName(file.name + (_truncated ? ' (已限制前5万行)' : ''));
+    setAnomalies(detectedAnomalies);
     setShowRealData(true);
     setChatHistory([]);
     setMainDiagnosticReport('');
 
     // Trigger AI Diagnostic
-    runFullDiagnostic(data, cols, stats, file.name);
+    runFullDiagnostic(processedData, cols, stats, file.name, expressMode);
+
+    registerJsonAsTable('dataset', processedData)
+      .then(() => console.log('[DuckDB] dataset registered:', processedData.length, 'rows'))
+      .catch(err => console.error('[DuckDB] register failed', err));
 
     // Add to memory
-    const previewStr = JSON.stringify(data.slice(0, 3));
+    const previewStr = JSON.stringify(processedData.slice(0, 3));
     addRecord({
       fileName: file.name,
       fileType: file.name.split('.').pop() || 'unknown',
       fileSize: file.size,
       dataPreview: previewStr,
       fieldCount: cols.length,
-      rowCount: data.length,
+      rowCount: processedData.length,
       summary: `Automated Diagnostic Protocol Initiated for ${cols.length} features.`,
       stats: JSON.stringify(stats)
     });
@@ -309,22 +404,7 @@ STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
 
   const loadMemoryRecord = (record: any) => {
     selectRecord(record);
-    // Real implementation would either re-parse the original file or store more data in memory.
-    // For demo, we just show a placeholder or the demo war room.
     setShowRealData(false); 
-  };
-
-  const loadExampleData = (dataset: any) => {
-    Papa.parse(dataset.data, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const fakeFile = new File([dataset.data], `${dataset.id}.csv`, { type: 'text/csv' });
-        processData(results.data, fakeFile);
-        setUploadTooltip(`🎉 数据已就绪！可以试试问：${dataset.presetQuestion}`);
-        setTimeout(() => setUploadTooltip(null), 8000);
-      }
-    });
   };
 
   return (
@@ -428,34 +508,19 @@ STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
           {!showRealData && (
             <div className="flex flex-col gap-6 w-full max-w-4xl mx-auto mt-8">
               
-              {/* 🚀 STEP 2: EXAMPLE DATA DRIVEN */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {exampleDatasets.map((dataset) => (
-                  <div 
-                    key={dataset.id}
-                    onClick={() => loadExampleData(dataset)}
-                    className="group bg-white p-5 rounded-3xl border border-gray-200 shadow-sm hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer flex flex-col relative overflow-hidden"
-                  >
-                    <div className="absolute -right-4 -top-4 w-16 h-16 bg-gray-50 rounded-full group-hover:bg-indigo-50 transition-colors pointer-events-none" />
-                    <div className="flex items-center gap-2 mb-3 z-10">
-                      <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                        {dataset.id === 'ecommerce_sales' && <TrendingUp className="w-4 h-4" />}
-                        {dataset.id === 'user_retention' && <Activity className="w-4 h-4" />}
-                        {dataset.id === 'supply_chain' && <LayoutDashboard className="w-4 h-4" />}
-                      </div>
-                      <h3 className="font-bold text-gray-800 text-sm truncate">{dataset.name}</h3>
-                    </div>
-                    <p className="text-xs text-gray-500 line-clamp-3 leading-relaxed mb-4 z-10">
-                      {dataset.desc}
-                    </p>
-                    <div className="mt-auto z-10 flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-mono font-bold text-gray-400 group-hover:text-indigo-500 transition-colors">
-                        Load Data
-                      </span>
-                      <ArrowUpRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500 transition-colors" />
-                    </div>
-                  </div>
-                ))}
+              <div className="w-full flex items-center justify-center gap-3">
+                 <button
+                   onClick={() => setExpressMode(false)}
+                   className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${!expressMode ? 'bg-[#0F0F0F] text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-200'}`}
+                 >
+                   深度分析模式（含完整思维链）
+                 </button>
+                 <button
+                   onClick={() => setExpressMode(true)}
+                   className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${expressMode ? 'bg-[#FF3B00] text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-200'}`}
+                 >
+                   ⚡ Express 极速模式（省略思考，直击要点）
+                 </button>
               </div>
 
               {/* 🚀 STEP 3: UPLOAD GUIDE */}
@@ -500,19 +565,123 @@ STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
                   <AnimatePresence>
                <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                  
+                 <div className="lg:col-span-12 bg-white rounded-3xl p-4 border border-gray-100 shadow-sm">
+                   <WorkflowStepper steps={[
+                     {
+                       id: 'upload',
+                       label: '① 上传数据',
+                       desc: `${fileName} · ${parsedData.length} 行`,
+                       status: 'done'
+                     },
+                     {
+                       id: 'profile',
+                       label: '② 数据画像',
+                       desc: anomalies.length > 0 ? `发现 ${anomalies.length} 项风险` : '字段诊断完成',
+                       status: isDiagnosing ? 'active' : (mainDiagnosticReport ? 'done' : 'pending')
+                     },
+                     {
+                       id: 'sql',
+                       label: '③ SQL 探索',
+                       desc: chatHistory.length > 0 ? `已发起 ${Math.ceil(chatHistory.length/2)} 轮查询` : '点这里开始问问题',
+                       status: chatHistory.length > 0 ? 'done' : (mainDiagnosticReport ? 'active' : 'pending')
+                     },
+                     {
+                       id: 'method',
+                       label: '④ 方法论分析',
+                       desc: activeMethodology ? activeMethodology.title : '尚未应用',
+                       status: analysisResult ? 'done' : 'pending'
+                     },
+                     {
+                       id: 'report',
+                       label: '⑤ 导出 BI 报告',
+                       desc: '一键生成完整报告',
+                       status: 'pending',
+                       onClick: () => {
+                         if (parsedData.length === 0) return;
+                         const payload = {
+                           fileName,
+                           data: parsedData.length > 5000 ? parsedData.slice(0, 5000) : parsedData,
+                           columns,
+                           columnStats,
+                           _truncated: parsedData.length > 5000,
+                           _originalRowCount: parsedData.length,
+                           exportedAt: new Date().toISOString()
+                         };
+                         sessionStorage.setItem('dc_pending_dataset', JSON.stringify(payload));
+                         window.location.href = '/smart-report?from=data-analysis';
+                       }
+                     }
+                   ]} />
+                 </div>
+
                  {/* Main AI Diagnostic Panel */}
                  <div className="lg:col-span-8 flex flex-col gap-6">
+
+                    {expressMode && !isDiagnosing && (
+                      <div className="bg-amber-100/50 border border-amber-200 text-amber-900 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                         <div className="flex items-center gap-2">
+                           <Zap className="w-5 h-5 text-amber-500" />
+                           <span className="font-medium text-sm">当前为 Express 极速模式，诊断已精简。</span>
+                         </div>
+                         <button 
+                           onClick={() => { setExpressMode(false); runFullDiagnostic(parsedData, columns, columnStats, fileName, false); }} 
+                           className="px-4 py-2 bg-white rounded-lg text-sm font-bold border border-amber-300 hover:bg-amber-50 transition-colors shadow-sm text-indigo-600"
+                         >
+                           切换完整诊断（带思维链）
+                         </button>
+                      </div>
+                    )}
+
+                    {anomalies.length > 0 && (
+                      <div className="bg-red-50 border border-red-100 rounded-3xl p-6">
+                        <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2">
+                          <AlertTriangle className="w-5 h-5 text-red-500" />
+                          红灯预警：发现 {anomalies.length} 处数据异常
+                        </h3>
+                        <div className="space-y-3">
+                          {anomalies.map((a, idx) => (
+                            <div key={idx} className="flex items-start gap-3 bg-white p-3 rounded-xl border border-red-50">
+                               <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest ${a.type === 'danger' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>{a.type}</div>
+                               <div>
+                                 <span className="text-sm font-bold text-gray-900 mr-2">[{a.field}]</span>
+                                 <span className="text-sm text-gray-600">{a.msg}</span>
+                               </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm flex flex-col">
                       <div className="flex items-center gap-3 mb-6 pb-6 border-b border-gray-100">
                         <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
                           <BrainCircuit className="w-6 h-6" />
                         </div>
-                        <div>
-                          <h2 className="font-serif italic font-bold text-2xl text-gray-900">核心全息诊断报告</h2>
-                          <div className="flex items-center gap-2 text-xs font-mono text-gray-500 mt-1">
-                            <span>{fileName}</span> • <span>{parsedData.length} records</span> • 
-                            <span className="text-emerald-500 flex items-center gap-1"><Zap className="w-3 h-3"/> Active</span>
-                          </div>
+                        <div className="flex-1 flex items-center justify-between">
+                           <div>
+                             <h2 className="font-serif italic font-bold text-2xl text-gray-900">核心全息诊断报告</h2>
+                             <div className="flex items-center gap-2 text-xs font-mono text-gray-500 mt-1">
+                               <span>{fileName}</span> • <span>{parsedData.length} records</span> • 
+                               <span className="text-emerald-500 flex items-center gap-1"><Zap className="w-3 h-3"/> Active</span>
+                             </div>
+                           </div>
+                           {!isDiagnosing && (
+                             <button
+                               onClick={() => {
+                                 sessionStorage.setItem('dc_pending_dataset', JSON.stringify({
+                                   data: parsedData,
+                                   columns,
+                                   fileName,
+                                   _truncated: fileName.includes('限制前5万行')
+                                 }));
+                                 window.location.href = '/smart-report?from=data-analysis';
+                               }}
+                               className="px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-2"
+                             >
+                               <LayoutDashboard className="w-4 h-4" />
+                               一键转入 SmartReport 生成看板
+                             </button>
+                           )}
                         </div>
                       </div>
 
@@ -552,9 +721,14 @@ STEP3: [正在做什么，如：运用Pearl因果阶梯识别混淆变量]
                     
                     {/* NL2Analysis Chat */}
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col h-[500px]">
-                      <div className="p-4 border-b border-gray-100 bg-gray-50 rounded-t-3xl flex items-center gap-2">
-                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                         <h3 className="font-bold text-sm text-gray-800">NL2Analysis 查询引擎</h3>
+                      <div className="p-4 border-b border-gray-100 bg-gray-50 rounded-t-3xl flex items-center justify-between">
+                         <div className="flex items-center gap-2">
+                           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                           <h3 className="font-bold text-sm text-gray-800">NL2Analysis 查询引擎</h3>
+                         </div>
+                         <span className="text-[10px] font-mono bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
+                           SQL Engine: DuckDB-WASM
+                         </span>
                       </div>
                       
                       <div className="flex-1 overflow-y-auto p-4 space-y-4">

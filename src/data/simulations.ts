@@ -24,4 +24,6 @@ export interface Simulation {
   expectedSeniorAnswer?: string;
 }
 
+// 模拟训练题数据（暂未启用，预留给未来"分析师陪练"功能）
+// 接口已被 mock.ts 通过 type Simulation 重新导出，删除前请确认无外部引用
 export const simulations: Simulation[] = [];

@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.32.0",
     "@google/genai": "^1.29.0",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@radix-ui/react-slot": "^1.2.4",
@@ -35,6 +36,7 @@
     "react-dom": "^19.0.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.15.0",
+    "react-syntax-highlighter": "^15.6.6",
     "recharts": "^3.8.1",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
@@ -50,6 +52,7 @@
     "@types/node": "^22.14.0",
     "@types/papaparse": "^5.5.2",
     "@types/react-router-dom": "^5.3.3",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",

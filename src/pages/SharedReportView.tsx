@@ -100,7 +100,16 @@ export function SharedReportView() {
       const isChart = match && match[1] === 'chart';
       if (!inline && isChart) {
          try {
-           const jsonStr = String(children).trim();
+           let jsonStr = String(children).trim();
+           const startIdx = jsonStr.indexOf('{');
+           const endIdx = jsonStr.lastIndexOf('}');
+           if (startIdx !== -1 && endIdx !== -1) {
+               jsonStr = jsonStr.substring(startIdx, endIdx + 1);
+           }
+           jsonStr = jsonStr.replace(/}\s*{/g, '},{')
+                            .replace(/]\s*\[/g, '],[')
+                            .replace(/,\s*}/g, '}')
+                            .replace(/,\s*]/g, ']');
            const config = JSON.parse(jsonStr);
            return <RenderChart config={config} />;
          } catch (e) {
