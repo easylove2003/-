@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { methodologies, Methodology } from '../data/mock';
 import { ChevronRight, X, ArrowLeft } from 'lucide-react';
-import { mockChartsMapping, getChartsForId } from '../data/mockCharts';
-import { ChartRenderer } from '../components/ChartRenderer';
 import { useLanguage } from '../lib/LanguageContext';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -118,26 +116,6 @@ export function Methodologies() {
               </div>
             </section>
           )}
-
-          <section className="space-y-6">
-            <h3 className="text-xl font-serif italic text-[#0F0F0F] pb-4 border-b border-[#0F0F0F]/20">{t('Visual Diagrams', '图表辅助理解')}</h3>
-            <div className="space-y-8 bg-white border border-[#0F0F0F] p-4 p-md-8 shadow-[8px_8px_0px_#0F0F0F]">
-              {(() => {
-                const charts = getChartsForId(selectedMethod.id, selectedMethod.name || selectedMethod.title, selectedMethod.category);
-                if (charts && charts.length > 0) {
-                  return charts.map(chart => (
-                    <ChartRenderer key={chart.chartId} chart={chart} />
-                  ));
-                }
-                if (selectedMethod.charts && selectedMethod.charts.length > 0) {
-                  return selectedMethod.charts.map((chart: any) => (
-                    <ChartRenderer key={chart.chartId} chart={chart} />
-                  ));
-                }
-                return <p className="text-sm font-mono opacity-50 italic">Processing visualization... No spatial output found.</p>;
-              })()}
-            </div>
-          </section>
 
           {selectedMethod.steps && selectedMethod.steps.length > 0 && (
             <section className="space-y-6">

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../lib/LanguageContext';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { fetchChatStream } from '../lib/api';
+import { fetchChatStream, ChatMessage } from '../lib/api';
 import { buildSystemPrompt } from '../prompts';
 import { useCanvasStore } from '../lib/canvas-engine/orchestrator';
 import { parseCanvasDirective } from '../lib/canvas-engine/parser';
@@ -159,7 +159,7 @@ export function AIAssistant() {
       // Context compression: if more than 10 turns (20 messages), summarize/compress older ones.
       // Easiest client-side simulation without a separate API call: 
       // just pass a "system note" indicating older context is truncated but keeping the most recent 10 messages (5 turns).
-      let formattedHistory = historyTexts.map(m => ({
+      let formattedHistory: ChatMessage[] = historyTexts.map(m => ({
         role: m.role === 'user' ? 'user' : 'model',
         parts: [{ text: m.content }]
       }));
@@ -392,7 +392,7 @@ export function AIAssistant() {
            )}
          </div>
 
-         <div className="flex-1 relative flex justify-center items-start">
+         <div className="flex-1 min-h-0 relative">
             <DynamicCanvas uploadedFileName={uploadedFileName || undefined} uploadedData={uploadedData} />
          </div>
       </div>

@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, ArrowLeft } from 'lucide-react';
 import { strategies, Strategy } from '../data/mock';
-import { mockChartsMapping, getChartsForId } from '../data/mockCharts';
-import { ChartRenderer } from '../components/ChartRenderer';
 import { useLanguage } from '../lib/LanguageContext';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -85,47 +83,46 @@ export function Strategies() {
             <h3 className="text-xl font-serif italic text-[#0F0F0F] pb-4 border-b border-[#0F0F0F]/20">{t('Core Framework', '解题思路 (核心框架)')}</h3>
             <ul className="text-base text-[#0F0F0F]/75 leading-relaxed space-y-4 list-none pl-0 font-sans">
               {selectedStrategy.framework?.map((item, idx) => {
-                const match = item.match(/【(.*?)】([\s\S]*)/);
-                if (match) {
+                if (typeof item === 'object' && item !== null) {
                   return (
                     <li key={idx} className="bg-white/80 backdrop-blur-md border border-[#0F0F0F]/5 p-6 md:p-8 rounded-2xl shadow-sm mb-4">
-                      <h4 className="font-bold text-[#0F0F0F] text-lg mb-4">{match[1]}</h4>
-                      <p className="text-[15px] text-[#0F0F0F]/80 leading-relaxed whitespace-pre-wrap">{match[2].trim()}</p>
+                      <h4 className="font-bold text-[#0F0F0F] text-lg mb-4">{item.name}</h4>
+                      <p className="text-[15px] text-[#0F0F0F]/80 leading-relaxed whitespace-pre-wrap">{item.description}</p>
                     </li>
                   );
                 }
-                return (
-                  <li key={idx} className="bg-white/80 backdrop-blur-md border border-[#0F0F0F]/5 p-6 md:p-8 rounded-2xl shadow-sm mb-4">
-                    <p className="text-[15px] text-[#0F0F0F]/80 leading-relaxed whitespace-pre-wrap">{item.trim()}</p>
-                  </li>
-                );
+                if (typeof item === 'string') {
+                  const match = item.match(/【(.*?)】([\s\S]*)/);
+                  if (match) {
+                    return (
+                      <li key={idx} className="bg-white/80 backdrop-blur-md border border-[#0F0F0F]/5 p-6 md:p-8 rounded-2xl shadow-sm mb-4">
+                        <h4 className="font-bold text-[#0F0F0F] text-lg mb-4">{match[1]}</h4>
+                        <p className="text-[15px] text-[#0F0F0F]/80 leading-relaxed whitespace-pre-wrap">{match[2].trim()}</p>
+                      </li>
+                    );
+                  }
+                  return (
+                    <li key={idx} className="bg-white/80 backdrop-blur-md border border-[#0F0F0F]/5 p-6 md:p-8 rounded-2xl shadow-sm mb-4">
+                      <p className="text-[15px] text-[#0F0F0F]/80 leading-relaxed whitespace-pre-wrap">{item.trim()}</p>
+                    </li>
+                  );
+                }
+                return null;
               })}
             </ul>
           </section>
 
-          <section className="space-y-6">
-            <h3 className="text-xl font-serif italic text-[#0F0F0F] pb-4 border-b border-[#0F0F0F]/20">{t('Visualizations', '图表辅助理解')}</h3>
-            <div className="space-y-8 bg-white border border-[#0F0F0F] p-4 p-md-8 shadow-[8px_8px_0px_#0F0F0F]">
-              {(() => {
-                const charts = getChartsForId(selectedStrategy.id, selectedStrategy.title, selectedStrategy.category);
-                if (charts && charts.length > 0) {
-                  return charts.map(chart => (
-                    <ChartRenderer key={chart.chartId} chart={chart} />
-                  ));
-                }
-                if (selectedStrategy.charts && selectedStrategy.charts.length > 0) {
-                  return selectedStrategy.charts.map((chart: any) => (
-                    <ChartRenderer key={chart.chartId} chart={chart} />
-                  ));
-                }
-                return <p className="text-sm font-mono opacity-50 italic">Processing charts... No visual output mapped.</p>;
-              })()}
-            </div>
-          </section>
-
           <section className="space-y-4">
             <h3 className="text-xl font-serif italic text-[#0F0F0F] pb-4 border-b border-[#0F0F0F]/20">{t('Application Scenarios', '什么时候用 (应用场景)')}</h3>
-            <p className="text-base text-[#0F0F0F]/75 leading-relaxed p-6 border border-[#0F0F0F]/20">{selectedStrategy.scenarios}</p>
+            <div className="text-base text-[#0F0F0F]/75 leading-relaxed p-6 border border-[#0F0F0F]/20">
+              {Array.isArray(selectedStrategy.scenarios) ? (
+                <ul className="list-disc pl-5 space-y-2">
+                  {selectedStrategy.scenarios.map((s, idx) => <li key={idx}>{s}</li>)}
+                </ul>
+              ) : (
+                selectedStrategy.scenarios
+              )}
+            </div>
           </section>
 
           <section className="space-y-6">
@@ -278,7 +275,12 @@ export function Strategies() {
                 <p className="text-[13px] text-[#0F0F0F]/70 line-clamp-3 leading-relaxed mb-6 font-medium">{s.overview?.replace(/【.*?】/g, '')}</p>
                 <div className="space-y-2">
                   {s.framework?.slice(0,3).map((f, i) => {
-                    const cleanF = f.replace(/【(.*?)】/, '$1: ');
+                    let cleanF = '';
+                    if (typeof f === 'string') {
+                      cleanF = f.replace(/【(.*?)】/, '$1: ');
+                    } else if (typeof f === 'object' && f !== null) {
+                      cleanF = `${f.name}: ${f.description}`;
+                    }
                     return (
                       <div key={i} className="text-[12px] font-sans leading-tight text-[#0F0F0F]/80 flex gap-2">
                         <span className="line-clamp-1 opacity-75">{cleanF}</span>

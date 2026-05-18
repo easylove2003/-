@@ -91,9 +91,10 @@ export const BaseBlock: React.FC<BaseBlockProps> = ({ block, children }) => {
       <AnimatePresence initial={false}>
         {!isCollapsed && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             className="flex-1 flex flex-col p-6 min-h-0 overflow-y-auto"
           >
             {isLoading ? (

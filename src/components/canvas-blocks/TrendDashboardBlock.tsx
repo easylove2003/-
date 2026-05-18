@@ -9,8 +9,32 @@ interface BlockProps {
 
 export const TrendDashboardBlock: React.FC<BlockProps> = ({ block }) => {
   const { data = {}, title, subtitle } = block;
-  const chartData = data.chartData || [];
-  const lines = data.lines || []; // { key: string, name: string, color: string }
+  let chartData = data.chartData || [];
+  let lines = data.lines || [];
+  const xAxisKey = data.xAxisKey || 'x';
+
+  if ((!chartData.length || !lines.length) && Array.isArray(data.series) && data.series.length > 0) {
+    const xSet = new Set<any>();
+    data.series.forEach((s: any) => {
+      (s.points || []).forEach((p: any) => xSet.add(p.x));
+    });
+    const xValues = Array.from(xSet);
+    chartData = xValues.map((x) => {
+      const row: any = { [xAxisKey]: x };
+      data.series.forEach((s: any) => {
+        const found = (s.points || []).find((p: any) => p.x === x);
+        row[s.name] = found ? found.y : null;
+      });
+      return row;
+    });
+    const palette = ['#3B82F6', '#10B981', '#F59E0B', '#6366F1', '#EF4444'];
+    lines = data.series.map((s: any, i: number) => ({
+      key: s.name,
+      name: s.name,
+      color: s.color || palette[i % palette.length],
+    }));
+  }
+
   const tableData = data.tableData || [];
 
   const handleLineClick = (data: any) => {
@@ -32,7 +56,7 @@ export const TrendDashboardBlock: React.FC<BlockProps> = ({ block }) => {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }} onClick={handleLineClick}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-              <XAxis dataKey={data.xAxisKey || "date"} tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={{ stroke: '#D1D5DB' }} tickLine={false} />
+              <XAxis dataKey={xAxisKey} tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={{ stroke: '#D1D5DB' }} tickLine={false} />
               <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={{ stroke: '#D1D5DB' }} tickLine={false} />
               <Tooltip 
                 contentStyle={{ borderRadius: '0.5rem', border: '2px solid #0F0F0F', boxShadow: '4px 4px 0 #0F0F0F' }}

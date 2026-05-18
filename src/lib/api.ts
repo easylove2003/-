@@ -56,10 +56,10 @@ Action = { id, title, owner, timeline, ice:{i,c,e}, impact, checklist?: Checklis
 { stages: { name, value, drop_pct, is_critical?: boolean }[] }
 
 [InsightCards.data]
-{ cards: { id, headline, detail, severity:'info'|'warn'|'critical', metric_ref? }[] }
+{ cards: { id, title, description, severity:'info'|'warn'|'critical', metric_ref? }[] }
 
 [TrendDashboard.data]
-{ series: { name, points: {x, y}[] }[], annotations?: { x, label, color }[] }
+{ chartData: object[], lines: { key: string, color: string }[], xAxisKey?: string }
 
 [CohortHeatmap.data]
 { rows: string[], cols: string[], matrix: number[][] }

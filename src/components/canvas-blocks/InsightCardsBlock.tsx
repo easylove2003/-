@@ -21,30 +21,45 @@ export const InsightCardsBlock: React.FC<BlockProps> = ({ block }) => {
        </div>
        
        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1">
-          {cards.map((card: any, i: number) => (
-             <motion.div 
-               whileHover={{ y: -5, scale: 1.02 }}
-               initial={{ opacity: 0, y: 20 }}
-               animate={{ opacity: 1, y: 0 }}
-               transition={{ delay: i * 0.1 }}
-               key={i} 
-               className="bg-white border-4 border-[#0F0F0F] p-5 shadow-[8px_8px_0_#0F0F0F] flex flex-col relative overflow-hidden group"
-             >
-                <div className="absolute -right-4 -top-6 text-9xl font-black text-gray-100 italic select-none group-hover:text-blue-50 transition-colors z-0">
-                  {i+1}
-                </div>
-                <div className="relative z-10">
-                   <h4 className="text-xl font-bold mb-3 leading-tight">{card.title}</h4>
-                   <p className="text-gray-600 text-sm mb-4 line-clamp-4">{card.description}</p>
-                   {card.metric && (
-                     <div className="mt-auto bg-gray-100 p-3 border border-gray-200">
-                        <span className="text-xs text-gray-500 uppercase tracking-widest">{card.metric_label}</span><br />
-                        <span className="text-2xl font-black text-blue-600">{card.metric}</span>
-                     </div>
-                   )}
-                </div>
-             </motion.div>
-          ))}
+          {cards.map((card: any, i: number) => {
+             const cardTitle = card.headline ?? card.title ?? '(未命名洞察)';
+             const cardDetail = card.detail ?? card.description ?? '';
+             const cardMetric = card.metric ?? card.metric_ref ?? null;
+             const cardMetricLabel = card.metric_label ?? '';
+             const sevColor = card.severity === 'critical' ? '#EF4444'
+                            : card.severity === 'warn'     ? '#F59E0B'
+                            : '#3B82F6';
+             return (
+                <motion.div
+                   whileHover={{ y: -5, scale: 1.02 }}
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ delay: i * 0.1 }}
+                   key={card.id ?? i}
+                   className="bg-white border-4 border-[#0F0F0F] p-5 shadow-[8px_8px_0_#0F0F0F] flex flex-col relative overflow-hidden group"
+                >
+                   <div className="absolute -right-4 -top-6 text-9xl font-black text-gray-100 italic select-none group-hover:text-blue-50 transition-colors z-0">
+                     {i + 1}
+                   </div>
+                   <div className="relative z-10 flex flex-col h-full">
+                      {card.severity && (
+                         <span className="self-start text-[10px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 mb-2 text-white"
+                               style={{ background: sevColor }}>
+                            {card.severity}
+                         </span>
+                      )}
+                      <h4 className="text-xl font-bold mb-3 leading-tight">{cardTitle}</h4>
+                      <p className="text-gray-600 text-sm mb-4 line-clamp-4 whitespace-pre-wrap">{cardDetail}</p>
+                      {cardMetric && (
+                        <div className="mt-auto bg-gray-100 p-3 border border-gray-200">
+                           <span className="text-xs text-gray-500 uppercase tracking-widest">{cardMetricLabel}</span><br />
+                           <span className="text-2xl font-black text-blue-600">{cardMetric}</span>
+                        </div>
+                      )}
+                   </div>
+                </motion.div>
+             );
+          })}
        </div>
     </div>
   );
