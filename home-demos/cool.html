@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synthesis · 极致酷炫版首页 Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0A0A0F;
+    color: #fff;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* Custom Cursor */
+  .cursor {
+    position: fixed;
+    width: 12px; height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    mix-blend-mode: difference;
+    transition: transform 0.15s ease;
+  }
+  .cursor-glow {
+    position: fixed;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 1;
+    transform: translate(-50%, -50%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Animated grid background */
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+    animation: gridMove 20s linear infinite;
+  }
+  @keyframes gridMove {
+    from { transform: translate(0, 0); }
+    to { transform: translate(60px, 60px); }
+  }
+
+  /* Floating particles */
+  .particle {
+    position: absolute;
+    background: radial-gradient(circle, rgba(99,102,241,0.6), transparent);
+    border-radius: 50%;
+    pointer-events: none;
+    animation: float 15s infinite ease-in-out;
+  }
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+    25% { transform: translate(50px, -80px) scale(1.2); opacity: 0.6; }
+    50% { transform: translate(-30px, 60px) scale(0.8); opacity: 0.4; }
+    75% { transform: translate(40px, 40px) scale(1.1); opacity: 0.5; }
+  }
+
+  /* Hero gradient orb */
+  .gradient-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.5;
+    animation: orbFloat 8s ease-in-out infinite;
+  }
+  @keyframes orbFloat {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(20px, -30px) scale(1.1); }
+  }
+
+  /* Glow text */
+  .glow-text {
+    background: linear-gradient(135deg, #fff 0%, #a5b4fc 50%, #c4b5fd 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 20px rgba(99,102,241,0.3));
+  }
+
+  /* Glass card */
+  .glass {
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  /* Tilt card */
+  .tilt-card {
+    transform-style: preserve-3d;
+    transition: transform 0.2s ease-out;
+    will-change: transform;
+  }
+  .tilt-card .tilt-inner {
+    transform: translateZ(40px);
+  }
+
+  /* Reveal animation */
+  .reveal {
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Word reveal */
+  .word-reveal .word {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: wordIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes wordIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Marquee */
+  .marquee {
+    display: flex;
+    animation: marquee 30s linear infinite;
+    white-space: nowrap;
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  /* Magnetic button */
+  .magnetic {
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Number counter */
+  .counter { font-variant-numeric: tabular-nums; }
+
+  /* Scroll progress */
+  .scroll-progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+    z-index: 9998;
+    transition: width 0.1s;
+  }
+
+  /* Section transitions */
+  section {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Noise texture */
+  .noise {
+    position: fixed;
+    inset: 0;
+    opacity: 0.04;
+    pointer-events: none;
+    z-index: 100;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Card hover sweep effect */
+  .sweep::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.1) 50%, transparent 60%);
+    transform: translateX(-100%);
+    transition: transform 0.6s ease;
+    pointer-events: none;
+  }
+  .sweep:hover::before { transform: translateX(100%); }
+
+  /* Animated underline */
+  .anim-underline {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 1px;
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    transition: background-size 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .anim-underline:hover {
+    background-size: 100% 1px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Custom Cursor -->
+<div class="cursor" id="cursor"></div>
+<div class="cursor-glow" id="cursorGlow"></div>
+
+<!-- Scroll Progress -->
+<div class="scroll-progress" id="scrollProgress" style="width: 0%"></div>
+
+<!-- Grid Background -->
+<div class="grid-bg"></div>
+
+<!-- Noise Texture -->
+<div class="noise"></div>
+
+<!-- Floating Particles -->
+<div class="fixed inset-0 pointer-events-none overflow-hidden" style="z-index:1">
+  <div class="particle" style="width:80px;height:80px;top:15%;left:10%;animation-delay:0s"></div>
+  <div class="particle" style="width:120px;height:120px;top:60%;left:80%;animation-delay:2s"></div>
+  <div class="particle" style="width:60px;height:60px;top:30%;left:60%;animation-delay:4s"></div>
+  <div class="particle" style="width:100px;height:100px;top:80%;left:20%;animation-delay:6s"></div>
+  <div class="particle" style="width:90px;height:90px;top:45%;left:45%;animation-delay:3s"></div>
+</div>
+
+<!-- Nav -->
+<nav class="fixed top-0 left-0 right-0 z-50 px-8 py-5 flex items-center justify-between glass">
+  <div class="flex items-center gap-3">
+    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold animate-pulse">S</div>
+    <span class="font-semibold text-sm">Synthesis</span>
+  </div>
+  <div class="hidden md:flex gap-6 text-xs text-gray-400">
+    <a href="#" class="anim-underline hover:text-white transition-colors">Features</a>
+    <a href="#" class="anim-underline hover:text-white transition-colors">Cases</a>
+    <a href="#" class="anim-underline hover:text-white transition-colors">Pricing</a>
+    <a href="#" class="anim-underline hover:text-white transition-colors">Docs</a>
+  </div>
+  <button class="magnetic px-4 py-2 bg-white text-black rounded-full text-xs font-semibold hover:bg-gray-200 transition-colors">Launch App →</button>
+</nav>
+
+<!-- HERO -->
+<section class="relative min-h-screen flex items-center justify-center px-8 pt-20 overflow-hidden">
+  <!-- Gradient orbs -->
+  <div class="gradient-orb" style="width:500px;height:500px;background:#6366f1;top:10%;left:-10%"></div>
+  <div class="gradient-orb" style="width:400px;height:400px;background:#a855f7;bottom:10%;right:-5%;animation-delay:2s"></div>
+  <div class="gradient-orb" style="width:300px;height:300px;background:#ec4899;top:50%;left:50%;animation-delay:4s"></div>
+
+  <div class="relative z-10 max-w-5xl mx-auto text-center">
+    <!-- Badge -->
+    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass mb-8 reveal">
+      <span class="relative flex w-2 h-2">
+        <span class="animate-ping absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-75"></span>
+        <span class="relative inline-flex w-2 h-2 rounded-full bg-emerald-500"></span>
+      </span>
+      <span class="text-xs text-gray-300">v2.4 · 已支持 DeepSeek + GPT-4 + Claude</span>
+    </div>
+
+    <!-- Mega Title -->
+    <h1 class="word-reveal text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter leading-[0.95] mb-8">
+      <span class="word glow-text" style="animation-delay:0.1s">Data</span>
+      <span class="word" style="animation-delay:0.25s">→</span>
+      <span class="word glow-text" style="animation-delay:0.4s">Decision.</span>
+      <br>
+      <span class="word text-white/40 text-3xl md:text-5xl lg:text-6xl" style="animation-delay:0.6s">In Five Minutes.</span>
+    </h1>
+
+    <p class="text-base md:text-lg text-gray-400 max-w-xl mx-auto mb-10 reveal" style="transition-delay:0.8s">
+      上传数据，AI 自动诊断、分析、归因、出报告。结论先行，让管理层一页拍板。
+    </p>
+
+    <!-- CTAs -->
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4 reveal" style="transition-delay:1s">
+      <button class="magnetic group relative px-8 py-4 bg-white text-black rounded-full font-semibold overflow-hidden">
+        <span class="relative z-10 flex items-center gap-2">
+          免费开始分析
+          <svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+        </span>
+        <span class="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+      </button>
+      <button class="magnetic group flex items-center gap-2 px-8 py-4 glass rounded-full font-semibold hover:bg-white/10 transition-colors">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        Watch Demo
+      </button>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-6 mt-20 max-w-2xl mx-auto reveal" style="transition-delay:1.2s">
+      <div class="text-center">
+        <div class="text-3xl md:text-4xl font-bold counter" data-target="10000">0</div>
+        <div class="text-xs text-gray-500 mt-1">数据集已分析</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl md:text-4xl font-bold counter" data-target="5000">0</div>
+        <div class="text-xs text-gray-500 mt-1">报告已生成</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl md:text-4xl font-bold"><span class="counter" data-target="3">0</span><span class="text-indigo-400">分钟</span></div>
+        <div class="text-xs text-gray-500 mt-1">平均出结果</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scroll indicator -->
+  <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-gray-500 text-xs animate-bounce">
+    <span>Scroll</span>
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+  </div>
+</section>
+
+<!-- Marquee Brand Strip -->
+<section class="border-y border-white/5 py-6 bg-black/40 overflow-hidden">
+  <div class="marquee text-2xl font-semibold text-gray-600">
+    <span class="px-8">⚡ AI Diagnostic</span>
+    <span class="px-8 text-indigo-400">●</span>
+    <span class="px-8">📊 NL2SQL Engine</span>
+    <span class="px-8 text-purple-400">●</span>
+    <span class="px-8">📋 Pyramid Reports</span>
+    <span class="px-8 text-pink-400">●</span>
+    <span class="px-8">⚖️ Causal Attribution</span>
+    <span class="px-8 text-indigo-400">●</span>
+    <span class="px-8">🚀 Real-time Insights</span>
+    <span class="px-8 text-purple-400">●</span>
+    <span class="px-8">⚡ AI Diagnostic</span>
+    <span class="px-8 text-indigo-400">●</span>
+    <span class="px-8">📊 NL2SQL Engine</span>
+    <span class="px-8 text-purple-400">●</span>
+    <span class="px-8">📋 Pyramid Reports</span>
+    <span class="px-8 text-pink-400">●</span>
+    <span class="px-8">⚖️ Causal Attribution</span>
+    <span class="px-8 text-indigo-400">●</span>
+    <span class="px-8">🚀 Real-time Insights</span>
+    <span class="px-8 text-purple-400">●</span>
+  </div>
+</section>
+
+<!-- FEATURES with 3D Tilt Cards -->
+<section class="relative py-32 px-8">
+  <div class="max-w-6xl mx-auto">
+    <div class="reveal text-center mb-16">
+      <div class="text-xs uppercase tracking-[0.3em] text-indigo-400 mb-4">Features</div>
+      <h2 class="text-4xl md:text-6xl font-bold tracking-tight">六大模块，<span class="glow-text">一站式</span>分析</h2>
+    </div>
+
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Card 1 -->
+      <div class="tilt-card sweep relative glass rounded-3xl p-8 cursor-pointer group reveal overflow-hidden" data-tilt>
+        <div class="tilt-inner">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-500 flex items-center justify-center text-2xl mb-6 shadow-lg shadow-indigo-500/30 group-hover:scale-110 transition-transform">📊</div>
+          <h3 class="text-xl font-bold mb-2">数据分析</h3>
+          <p class="text-sm text-gray-400 mb-6">上传 CSV/Excel，自动诊断质量、识别异常、NL2SQL 查询</p>
+          <div class="flex items-center text-xs text-indigo-400 font-semibold">
+            进入模块 <span class="ml-1 group-hover:translate-x-2 transition-transform">→</span>
+          </div>
+        </div>
+        <div class="absolute -bottom-20 -right-20 w-40 h-40 rounded-full bg-indigo-500/20 blur-3xl group-hover:bg-indigo-500/40 transition-colors"></div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="tilt-card sweep relative glass rounded-3xl p-8 cursor-pointer group reveal overflow-hidden" style="transition-delay:0.1s" data-tilt>
+        <div class="tilt-inner">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl mb-6 shadow-lg shadow-purple-500/30 group-hover:scale-110 transition-transform">✨</div>
+          <h3 class="text-xl font-bold mb-2">AI 助手</h3>
+          <p class="text-sm text-gray-400 mb-6">自然语言对话，AI 自动写 SQL、跑查询、生成图表</p>
+          <div class="flex items-center text-xs text-purple-400 font-semibold">
+            进入模块 <span class="ml-1 group-hover:translate-x-2 transition-transform">→</span>
+          </div>
+        </div>
+        <div class="absolute -bottom-20 -right-20 w-40 h-40 rounded-full bg-purple-500/20 blur-3xl group-hover:bg-purple-500/40 transition-colors"></div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="tilt-card sweep relative glass rounded-3xl p-8 cursor-pointer group reveal overflow-hidden" style="transition-delay:0.2s" data-tilt>
+        <div class="tilt-inner">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-2xl mb-6 shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform">📋</div>
+          <h3 class="text-xl font-bold mb-2">智能报告</h3>
+          <p class="text-sm text-gray-400 mb-6">金字塔原理结构，结论先行，导出 PDF/PPT</p>
+          <div class="flex items-center text-xs text-emerald-400 font-semibold">
+            进入模块 <span class="ml-1 group-hover:translate-x-2 transition-transform">→</span>
+          </div>
+        </div>
+        <div class="absolute -bottom-20 -right-20 w-40 h-40 rounded-full bg-emerald-500/20 blur-3xl group-hover:bg-emerald-500/40 transition-colors"></div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="tilt-card sweep relative glass rounded-3xl p-8 cursor-pointer group reveal overflow-hidden" style="transition-delay:0.3s" data-tilt>
+        <div class="tilt-inner">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-2xl mb-6 shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">⚖️</div>
+          <h3 class="text-xl font-bold mb-2">对比归因</h3>
+          <p class="text-sm text-gray-400 mb-6">多维度下钻，瀑布图归因，找到根本原因</p>
+          <div class="flex items-center text-xs text-amber-400 font-semibold">
+            进入模块 <span class="ml-1 group-hover:translate-x-2 transition-transform">→</span>
+          </div>
+        </div>
+        <div class="absolute -bottom-20 -right-20 w-40 h-40 rounded-full bg-amber-500/20 blur-3xl group-hover:bg-amber-500/40 transition-colors"></div>
+      </div>
+
+      <!-- Card 5 -->
+      <div class="tilt-card sweep relative glass rounded-3xl p-8 cursor-pointer group reveal overflow-hidden" style="transition-delay:0.4s" data-tilt>
+        <div class="tilt-inner">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 to-red-500 flex items-center justify-center text-2xl mb-6 shadow-lg shadow-rose-500/30 group-hover:scale-110 transition-transform">📚</div>
+          <h3 class="text-xl font-bold mb-2">案例库</h3>
+          <p class="text-sm text-gray-400 mb-6">20+ 真实电商案例，可直接套用到你的业务</p>
+          <div class="flex items-center text-xs text-rose-400 font-semibold">
+            进入模块 <span class="ml-1 group-hover:translate-x-2 transition-transform">→</span>
+          </div>
+        </div>
+        <div class="absolute -bottom-20 -right-20 w-40 h-40 rounded-full bg-rose-500/20 blur-3xl group-hover:bg-rose-500/40 transition-colors"></div>
+      </div>
+
+      <!-- Card 6 -->
+      <div class="tilt-card sweep relative glass rounded-3xl p-8 cursor-pointer group reveal overflow-hidden" style="transition-delay:0.5s" data-tilt>
+        <div class="tilt-inner">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-500 flex items-center justify-center text-2xl mb-6 shadow-lg shadow-sky-500/30 group-hover:scale-110 transition-transform">💡</div>
+          <h3 class="text-xl font-bold mb-2">方法论</h3>
+          <p class="text-sm text-gray-400 mb-6">RFM、AARRR、5Why 等专业框架一键应用</p>
+          <div class="flex items-center text-xs text-sky-400 font-semibold">
+            进入模块 <span class="ml-1 group-hover:translate-x-2 transition-transform">→</span>
+          </div>
+        </div>
+        <div class="absolute -bottom-20 -right-20 w-40 h-40 rounded-full bg-sky-500/20 blur-3xl group-hover:bg-sky-500/40 transition-colors"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Showcase Section -->
+<section class="relative py-32 px-8">
+  <div class="max-w-6xl mx-auto">
+    <div class="reveal text-center mb-16">
+      <div class="text-xs uppercase tracking-[0.3em] text-purple-400 mb-4">How it works</div>
+      <h2 class="text-4xl md:text-6xl font-bold tracking-tight">三步，<span class="glow-text">从混乱到清晰</span></h2>
+    </div>
+
+    <div class="space-y-8">
+      <div class="reveal flex flex-col md:flex-row items-center gap-8 glass rounded-3xl p-10">
+        <div class="text-7xl font-bold glow-text">01</div>
+        <div class="flex-1">
+          <h3 class="text-2xl font-bold mb-2">上传你的数据</h3>
+          <p class="text-gray-400">拖拽 CSV、Excel 文件到页面。AI 自动识别字段、推断业务场景。</p>
+        </div>
+        <div class="w-full md:w-96 h-32 glass rounded-2xl flex items-center justify-center text-4xl">📁</div>
+      </div>
+
+      <div class="reveal flex flex-col md:flex-row-reverse items-center gap-8 glass rounded-3xl p-10" style="transition-delay:0.15s">
+        <div class="text-7xl font-bold glow-text">02</div>
+        <div class="flex-1">
+          <h3 class="text-2xl font-bold mb-2">AI 智能诊断</h3>
+          <p class="text-gray-400">大模型自动分析数据质量、发现异常、生成关键指标卡片。</p>
+        </div>
+        <div class="w-full md:w-96 h-32 glass rounded-2xl flex items-center justify-center text-4xl">🤖</div>
+      </div>
+
+      <div class="reveal flex flex-col md:flex-row items-center gap-8 glass rounded-3xl p-10" style="transition-delay:0.3s">
+        <div class="text-7xl font-bold glow-text">03</div>
+        <div class="flex-1">
+          <h3 class="text-2xl font-bold mb-2">出报告 → 拍板</h3>
+          <p class="text-gray-400">生成金字塔结构的业务决策报告，导出 PDF/PPT 直接给老板。</p>
+        </div>
+        <div class="w-full md:w-96 h-32 glass rounded-2xl flex items-center justify-center text-4xl">📊</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="relative py-32 px-8">
+  <div class="max-w-4xl mx-auto text-center reveal">
+    <h2 class="text-5xl md:text-7xl font-bold tracking-tight mb-6">
+      Ready to <span class="glow-text">level up</span>?
+    </h2>
+    <p class="text-gray-400 mb-10 max-w-xl mx-auto">不需要写代码，不需要懂统计。从今天开始，让你的数据真正为业务说话。</p>
+    <button class="magnetic group relative px-10 py-5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full text-lg font-bold overflow-hidden">
+      <span class="relative z-10">现在就开始 →</span>
+      <span class="absolute inset-0 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+    </button>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="border-t border-white/5 py-8 px-8 text-center text-xs text-gray-500">
+  © 2026 Synthesis · AI Data Analysis Platform
+</footer>
+
+<script>
+// === Custom Cursor ===
+const cursor = document.getElementById('cursor');
+const cursorGlow = document.getElementById('cursorGlow');
+let mouseX = 0, mouseY = 0;
+let glowX = 0, glowY = 0;
+
+document.addEventListener('mousemove', (e) => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+  cursor.style.transform = `translate(${mouseX - 6}px, ${mouseY - 6}px)`;
+});
+
+function animateGlow() {
+  glowX += (mouseX - glowX) * 0.15;
+  glowY += (mouseY - glowY) * 0.15;
+  cursorGlow.style.left = glowX + 'px';
+  cursorGlow.style.top = glowY + 'px';
+  requestAnimationFrame(animateGlow);
+}
+animateGlow();
+
+// Cursor scale on interactive elements
+document.querySelectorAll('a, button, .tilt-card').forEach(el => {
+  el.addEventListener('mouseenter', () => cursor.style.transform = `translate(${mouseX - 12}px, ${mouseY - 12}px) scale(2.5)`);
+  el.addEventListener('mouseleave', () => cursor.style.transform = `translate(${mouseX - 6}px, ${mouseY - 6}px) scale(1)`);
+});
+
+// === Scroll Progress ===
+window.addEventListener('scroll', () => {
+  const h = document.documentElement;
+  const pct = (h.scrollTop / (h.scrollHeight - h.clientHeight)) * 100;
+  document.getElementById('scrollProgress').style.width = pct + '%';
+});
+
+// === Reveal on Scroll ===
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+// === Counter Animation ===
+const counterObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const el = e.target;
+      const target = parseInt(el.dataset.target);
+      const duration = 2000;
+      const start = performance.now();
+      const animate = (now) => {
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = Math.floor(target * eased);
+        el.textContent = current.toLocaleString();
+        if (progress < 1) requestAnimationFrame(animate);
+      };
+      requestAnimationFrame(animate);
+      counterObserver.unobserve(el);
+    }
+  });
+}, { threshold: 0.5 });
+
+document.querySelectorAll('.counter').forEach(el => counterObserver.observe(el));
+
+// === 3D Tilt Cards ===
+document.querySelectorAll('[data-tilt]').forEach(card => {
+  card.addEventListener('mousemove', (e) => {
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const rotateX = (y - cy) / 20;
+    const rotateY = (cx - x) / 20;
+    card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.02)`;
+  });
+  card.addEventListener('mouseleave', () => {
+    card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) scale(1)';
+  });
+});
+
+// === Magnetic Buttons ===
+document.querySelectorAll('.magnetic').forEach(btn => {
+  btn.addEventListener('mousemove', (e) => {
+    const rect = btn.getBoundingClientRect();
+    const x = e.clientX - rect.left - rect.width / 2;
+    const y = e.clientY - rect.top - rect.height / 2;
+    btn.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px)`;
+  });
+  btn.addEventListener('mouseleave', () => {
+    btn.style.transform = 'translate(0, 0)';
+  });
+});
+
+// === Word reveal sequencing ===
+document.querySelectorAll('.word-reveal').forEach(container => {
+  // already has individual delays via inline style
+});
+</script>
+</body>
+</html>

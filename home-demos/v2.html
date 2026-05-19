@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synthesis · Awwwards 风格首页</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F1EA;
+    --ink: #1A1A1A;
+    --orange: #FF5722;
+    --blue: #2962FF;
+    --yellow: #FFC107;
+    --pink: #EC407A;
+    --green: #00C853;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    overflow-x: hidden;
+  }
+  .serif { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+
+  /* ===== Letter reveal (boot animation) ===== */
+  .letter {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(60px) rotateX(90deg);
+    transform-origin: bottom;
+  }
+  .letter.in {
+    animation: letterIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes letterIn {
+    to { opacity: 1; transform: translateY(0) rotateX(0deg); }
+  }
+
+  /* ===== Sequential element reveal ===== */
+  .seq {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .seq.in { opacity: 1; transform: translateY(0); }
+
+  /* ===== Floating shapes ===== */
+  .shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(40px);
+    opacity: 0.5;
+    animation: drift 20s ease-in-out infinite;
+  }
+  @keyframes drift {
+    0%, 100% { transform: translate(0,0); }
+    33% { transform: translate(40px, -50px) rotate(120deg); }
+    66% { transform: translate(-30px, 40px) rotate(240deg); }
+  }
+
+  /* ===== Marquee ===== */
+  .marquee {
+    display: flex;
+    animation: marquee 40s linear infinite;
+    white-space: nowrap;
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  /* ===== Module showcase ===== */
+  .module-stage {
+    position: relative;
+    height: 600px;
+    overflow: hidden;
+  }
+  .module-card {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .module-card.active { opacity: 1; pointer-events: auto; }
+
+  .module-bg-shape {
+    position: absolute;
+    border-radius: 50%;
+    transition: all 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Number pop effect */
+  .num-pop {
+    display: inline-block;
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Cursor halo */
+  .halo {
+    position: fixed;
+    width: 24px; height: 24px;
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.15s ease, width 0.3s, height 0.3s, border-color 0.3s;
+    mix-blend-mode: difference;
+  }
+  .halo.big { width: 80px; height: 80px; border-color: var(--orange); }
+
+  /* Module thumbnail nav */
+  .thumb {
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .thumb.active {
+    transform: scale(1.05);
+  }
+  .thumb-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: var(--ink);
+    width: 0%;
+  }
+  .thumb.active .thumb-progress {
+    animation: progress 5s linear forwards;
+  }
+  @keyframes progress {
+    from { width: 0%; }
+    to { width: 100%; }
+  }
+
+  /* Step number animation */
+  .big-num {
+    font-size: clamp(8rem, 22vw, 18rem);
+    line-height: 0.85;
+    letter-spacing: -0.05em;
+    font-weight: 200;
+  }
+
+  /* Underline link */
+  .ul-link {
+    position: relative;
+    display: inline-block;
+  }
+  .ul-link::after {
+    content: '';
+    position: absolute;
+    left: 0; bottom: -2px;
+    width: 100%; height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ul-link:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+
+  /* Rotating badge */
+  .rotate-text {
+    animation: rotate 20s linear infinite;
+  }
+  @keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Cursor -->
+<div class="halo" id="halo"></div>
+
+<!-- Floating decorative shapes -->
+<div class="shape" style="width:500px;height:500px;background:#FFC107;top:5%;right:-10%;"></div>
+<div class="shape" style="width:400px;height:400px;background:#FF5722;bottom:10%;left:-10%;animation-delay:5s"></div>
+<div class="shape" style="width:300px;height:300px;background:#2962FF;top:50%;left:50%;animation-delay:10s;opacity:0.3"></div>
+
+<!-- ============ NAV ============ -->
+<nav class="fixed top-0 left-0 right-0 z-50 px-6 lg:px-10 py-5 flex items-center justify-between mix-blend-difference text-white">
+  <div class="seq" data-delay="100">
+    <span class="serif text-2xl">Synthesis</span><span class="text-lg align-top">*</span>
+  </div>
+  <div class="seq hidden md:flex gap-8 text-xs uppercase tracking-[0.15em]" data-delay="200">
+    <a href="#" class="ul-link">Index</a>
+    <a href="#" class="ul-link">Work</a>
+    <a href="#" class="ul-link">Pricing</a>
+    <a href="#" class="ul-link">Contact</a>
+  </div>
+  <div class="seq text-xs uppercase tracking-[0.15em]" data-delay="300">
+    <span class="opacity-60">v 2.4 ·</span> Live
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section class="relative min-h-screen flex flex-col justify-end px-6 lg:px-10 pb-20 pt-32 overflow-hidden">
+  <!-- Top mini text -->
+  <div class="seq absolute top-32 left-6 lg:left-10 text-xs uppercase tracking-[0.2em] flex items-center gap-3" data-delay="500">
+    <span class="w-8 h-px bg-current"></span>
+    <span>↳ Data Intelligence Workspace</span>
+  </div>
+
+  <!-- Side rotating badge -->
+  <div class="seq absolute top-1/3 right-10 hidden xl:block" data-delay="2500">
+    <div class="relative w-32 h-32">
+      <svg class="rotate-text w-full h-full" viewBox="0 0 100 100">
+        <defs>
+          <path id="circle" d="M 50,50 m -37,0 a 37,37 0 1,1 74,0 a 37,37 0 1,1 -74,0" />
+        </defs>
+        <text font-size="9" font-family="Inter" letter-spacing="2" fill="currentColor">
+          <textPath href="#circle">★ AI POWERED · DATA TO DECISION · 5 MIN ·</textPath>
+        </text>
+      </svg>
+      <div class="absolute inset-0 flex items-center justify-center">
+        <div class="w-3 h-3 bg-current rounded-full"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BIG TITLE with letter-by-letter animation -->
+  <h1 class="text-[16vw] lg:text-[14vw] xl:text-[13vw] leading-[0.85] tracking-[-0.04em] font-bold mb-8" id="megaTitle">
+    <span class="block" data-text="Data."></span>
+    <span class="block serif" data-text="Decoded." data-color="orange"></span>
+    <span class="block text-[0.4em] tracking-tight font-normal opacity-50 mt-4" data-text="In five minutes flat."></span>
+  </h1>
+
+  <!-- Bottom row: subtitle + CTA -->
+  <div class="grid grid-cols-12 gap-6 items-end">
+    <div class="col-span-12 md:col-span-5 seq" data-delay="3500">
+      <p class="text-lg leading-relaxed">
+        上传任意数据，AI 自动诊断、归因、出报告。结论先行，让管理层一页拍板。<span class="opacity-50">不需要写代码。</span>
+      </p>
+    </div>
+    <div class="col-span-12 md:col-span-3 md:col-start-7 seq" data-delay="3700">
+      <div class="text-xs uppercase tracking-[0.15em] opacity-50 mb-3">— What's inside</div>
+      <div class="text-sm">
+        <div class="flex items-center justify-between border-b border-current/20 py-2"><span>数据诊断</span><span class="opacity-50">01</span></div>
+        <div class="flex items-center justify-between border-b border-current/20 py-2"><span>AI 对话分析</span><span class="opacity-50">02</span></div>
+        <div class="flex items-center justify-between border-b border-current/20 py-2"><span>金字塔报告</span><span class="opacity-50">03</span></div>
+        <div class="flex items-center justify-between border-b border-current/20 py-2"><span>归因瀑布</span><span class="opacity-50">04</span></div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-3 md:col-start-10 seq flex flex-col items-end gap-4" data-delay="3900">
+      <a href="#" class="group flex items-center gap-3 px-6 py-4 bg-[var(--ink)] text-[var(--bg)] rounded-full text-sm font-semibold hover:bg-[var(--orange)] transition-colors">
+        Start Free
+        <span class="w-6 h-6 rounded-full bg-[var(--bg)] text-[var(--ink)] flex items-center justify-center group-hover:rotate-45 transition-transform">↗</span>
+      </a>
+      <span class="text-xs opacity-50">No credit card required</span>
+    </div>
+  </div>
+
+  <!-- Scroll hint -->
+  <div class="seq absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-[10px] uppercase tracking-[0.3em]" data-delay="4500">
+    <span>Scroll</span>
+    <div class="w-px h-12 bg-current animate-pulse"></div>
+  </div>
+</section>
+
+<!-- ============ MARQUEE STRIP ============ -->
+<section class="border-y border-current/10 py-4 overflow-hidden bg-[var(--ink)] text-[var(--bg)]">
+  <div class="marquee text-3xl lg:text-5xl">
+    <span class="px-8 serif">★ Pyramid Reports</span>
+    <span class="px-8 font-bold uppercase">// NL2SQL</span>
+    <span class="px-8 serif">★ Causal Attribution</span>
+    <span class="px-8 font-bold uppercase">// AI Diagnostic</span>
+    <span class="px-8 serif">★ Real-time Insights</span>
+    <span class="px-8 font-bold uppercase">// Pyramid Reports</span>
+    <span class="px-8 serif">★ NL2SQL</span>
+    <span class="px-8 font-bold uppercase">// Causal Attribution</span>
+    <span class="px-8 serif">★ AI Diagnostic</span>
+    <span class="px-8 font-bold uppercase">// Real-time Insights</span>
+  </div>
+</section>
+
+<!-- ============ MODULE SHOWCASE (auto-rotating) ============ -->
+<section class="relative py-24 lg:py-40 px-6 lg:px-10 overflow-hidden">
+  <div class="max-w-[1400px] mx-auto">
+    <!-- Section header -->
+    <div class="grid grid-cols-12 gap-6 mb-16 items-end">
+      <div class="col-span-12 md:col-span-7 seq-scroll">
+        <div class="text-xs uppercase tracking-[0.2em] opacity-50 mb-4">— Capabilities · 06 Modules</div>
+        <h2 class="text-5xl lg:text-7xl tracking-tight font-bold leading-[0.95]">
+          One platform.<br>
+          <span class="serif">Six superpowers.</span>
+        </h2>
+      </div>
+      <div class="col-span-12 md:col-span-4 md:col-start-9 seq-scroll text-sm opacity-70">
+        每个模块都为业务决策服务。点击下方缩略图切换，或等待自动轮播。
+      </div>
+    </div>
+
+    <!-- Stage -->
+    <div class="module-stage rounded-3xl overflow-hidden relative" id="moduleStage">
+
+      <!-- Module 1: Data Analysis -->
+      <div class="module-card active" data-idx="0" style="background: #FFE4B5">
+        <div class="module-bg-shape" style="width:600px;height:600px;background:#FF5722;top:-200px;right:-200px;"></div>
+        <div class="module-bg-shape" style="width:300px;height:300px;background:#FFC107;bottom:-100px;left:30%;"></div>
+        <div class="relative z-10 grid grid-cols-12 gap-6 h-full p-10 lg:p-16">
+          <div class="col-span-12 lg:col-span-7 flex flex-col justify-between">
+            <div>
+              <div class="text-xs uppercase tracking-[0.2em] mb-6">Module 01 / 06</div>
+              <h3 class="text-6xl lg:text-8xl font-bold tracking-tight leading-[0.9] mb-6">
+                Data <span class="serif">Diagnosis</span>
+              </h3>
+              <p class="text-lg max-w-md opacity-70">上传 CSV/Excel，AI 自动识别字段、检测异常、生成质量评分。所有数据问题一目了然。</p>
+            </div>
+            <div class="flex gap-4 items-center">
+              <div class="flex items-center gap-2 text-sm font-semibold">
+                <span class="w-12 h-px bg-current"></span>
+                进入模块
+              </div>
+              <span class="serif text-3xl">→</span>
+            </div>
+          </div>
+          <div class="col-span-12 lg:col-span-5 relative">
+            <div class="big-num serif absolute -bottom-8 right-0">01</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 2: AI Assistant -->
+      <div class="module-card" data-idx="1" style="background: #E3F2FD">
+        <div class="module-bg-shape" style="width:500px;height:500px;background:#2962FF;top:-100px;left:-100px;"></div>
+        <div class="module-bg-shape" style="width:400px;height:400px;background:#EC407A;bottom:-150px;right:10%;"></div>
+        <div class="relative z-10 grid grid-cols-12 gap-6 h-full p-10 lg:p-16">
+          <div class="col-span-12 lg:col-span-7 flex flex-col justify-between">
+            <div>
+              <div class="text-xs uppercase tracking-[0.2em] mb-6">Module 02 / 06</div>
+              <h3 class="text-6xl lg:text-8xl font-bold tracking-tight leading-[0.9] mb-6">
+                AI <span class="serif">Copilot</span>
+              </h3>
+              <p class="text-lg max-w-md opacity-70">用自然语言提问，AI 自动写 SQL、跑查询、生成图表，并给出业务建议。像和资深分析师对话。</p>
+            </div>
+            <div class="flex gap-4 items-center">
+              <div class="flex items-center gap-2 text-sm font-semibold">
+                <span class="w-12 h-px bg-current"></span>
+                进入模块
+              </div>
+              <span class="serif text-3xl">→</span>
+            </div>
+          </div>
+          <div class="col-span-12 lg:col-span-5 relative">
+            <div class="big-num serif absolute -bottom-8 right-0">02</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 3: Smart Report -->
+      <div class="module-card" data-idx="2" style="background: #C8E6C9">
+        <div class="module-bg-shape" style="width:550px;height:550px;background:#00C853;top:-150px;right:-150px;"></div>
+        <div class="module-bg-shape" style="width:350px;height:350px;background:#FFC107;bottom:-100px;left:20%;"></div>
+        <div class="relative z-10 grid grid-cols-12 gap-6 h-full p-10 lg:p-16">
+          <div class="col-span-12 lg:col-span-7 flex flex-col justify-between">
+            <div>
+              <div class="text-xs uppercase tracking-[0.2em] mb-6">Module 03 / 06</div>
+              <h3 class="text-6xl lg:text-8xl font-bold tracking-tight leading-[0.9] mb-6">
+                Pyramid <span class="serif">Reports</span>
+              </h3>
+              <p class="text-lg max-w-md opacity-70">基于金字塔原理：结论先行 → 论据支撑 → 数据佐证。一键导出 PDF/PPT 给老板。</p>
+            </div>
+            <div class="flex gap-4 items-center">
+              <div class="flex items-center gap-2 text-sm font-semibold">
+                <span class="w-12 h-px bg-current"></span>
+                进入模块
+              </div>
+              <span class="serif text-3xl">→</span>
+            </div>
+          </div>
+          <div class="col-span-12 lg:col-span-5 relative">
+            <div class="big-num serif absolute -bottom-8 right-0">03</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 4: Compare -->
+      <div class="module-card" data-idx="3" style="background: #FCE4EC">
+        <div class="module-bg-shape" style="width:500px;height:500px;background:#EC407A;top:-100px;right:-100px;"></div>
+        <div class="module-bg-shape" style="width:400px;height:400px;background:#2962FF;bottom:-150px;left:-100px;"></div>
+        <div class="relative z-10 grid grid-cols-12 gap-6 h-full p-10 lg:p-16">
+          <div class="col-span-12 lg:col-span-7 flex flex-col justify-between">
+            <div>
+              <div class="text-xs uppercase tracking-[0.2em] mb-6">Module 04 / 06</div>
+              <h3 class="text-6xl lg:text-8xl font-bold tracking-tight leading-[0.9] mb-6">
+                Causal <span class="serif">Attribution</span>
+              </h3>
+              <p class="text-lg max-w-md opacity-70">多维度下钻 + 瀑布图归因，找到增长或下降的根本原因。不止"发生了什么"，还要"为什么"。</p>
+            </div>
+            <div class="flex gap-4 items-center">
+              <div class="flex items-center gap-2 text-sm font-semibold">
+                <span class="w-12 h-px bg-current"></span>
+                进入模块
+              </div>
+              <span class="serif text-3xl">→</span>
+            </div>
+          </div>
+          <div class="col-span-12 lg:col-span-5 relative">
+            <div class="big-num serif absolute -bottom-8 right-0">04</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 5: Cases -->
+      <div class="module-card" data-idx="4" style="background: #FFF9C4">
+        <div class="module-bg-shape" style="width:600px;height:600px;background:#FFC107;top:-200px;left:-100px;"></div>
+        <div class="module-bg-shape" style="width:300px;height:300px;background:#FF5722;bottom:-100px;right:20%;"></div>
+        <div class="relative z-10 grid grid-cols-12 gap-6 h-full p-10 lg:p-16">
+          <div class="col-span-12 lg:col-span-7 flex flex-col justify-between">
+            <div>
+              <div class="text-xs uppercase tracking-[0.2em] mb-6">Module 05 / 06</div>
+              <h3 class="text-6xl lg:text-8xl font-bold tracking-tight leading-[0.9] mb-6">
+                Live <span class="serif">Case Library</span>
+              </h3>
+              <p class="text-lg max-w-md opacity-70">20+ 真实电商案例，覆盖 AARRR、RFM、复购、归因等核心场景。可直接套用。</p>
+            </div>
+            <div class="flex gap-4 items-center">
+              <div class="flex items-center gap-2 text-sm font-semibold">
+                <span class="w-12 h-px bg-current"></span>
+                进入模块
+              </div>
+              <span class="serif text-3xl">→</span>
+            </div>
+          </div>
+          <div class="col-span-12 lg:col-span-5 relative">
+            <div class="big-num serif absolute -bottom-8 right-0">05</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 6: Methodology -->
+      <div class="module-card" data-idx="5" style="background: #D1C4E9">
+        <div class="module-bg-shape" style="width:500px;height:500px;background:#7E57C2;top:-100px;right:-150px;"></div>
+        <div class="module-bg-shape" style="width:400px;height:400px;background:#00C853;bottom:-150px;left:10%;"></div>
+        <div class="relative z-10 grid grid-cols-12 gap-6 h-full p-10 lg:p-16">
+          <div class="col-span-12 lg:col-span-7 flex flex-col justify-between">
+            <div>
+              <div class="text-xs uppercase tracking-[0.2em] mb-6">Module 06 / 06</div>
+              <h3 class="text-6xl lg:text-8xl font-bold tracking-tight leading-[0.9] mb-6">
+                Method<span class="serif">ology</span>
+              </h3>
+              <p class="text-lg max-w-md opacity-70">RFM 用户分层、AARRR 增长模型、5Why 根因、DID 因果推断，一键应用到你的数据。</p>
+            </div>
+            <div class="flex gap-4 items-center">
+              <div class="flex items-center gap-2 text-sm font-semibold">
+                <span class="w-12 h-px bg-current"></span>
+                进入模块
+              </div>
+              <span class="serif text-3xl">→</span>
+            </div>
+          </div>
+          <div class="col-span-12 lg:col-span-5 relative">
+            <div class="big-num serif absolute -bottom-8 right-0">06</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Thumbnail nav -->
+    <div class="grid grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
+      <button class="thumb active relative bg-[var(--ink)] text-[var(--bg)] rounded-2xl p-4 text-left overflow-hidden" data-go="0">
+        <div class="text-[10px] uppercase tracking-widest opacity-60 mb-2">01</div>
+        <div class="text-sm font-semibold">Diagnosis</div>
+        <div class="thumb-progress"></div>
+      </button>
+      <button class="thumb relative border border-current/20 rounded-2xl p-4 text-left hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors overflow-hidden" data-go="1">
+        <div class="text-[10px] uppercase tracking-widest opacity-60 mb-2">02</div>
+        <div class="text-sm font-semibold">Copilot</div>
+        <div class="thumb-progress"></div>
+      </button>
+      <button class="thumb relative border border-current/20 rounded-2xl p-4 text-left hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors overflow-hidden" data-go="2">
+        <div class="text-[10px] uppercase tracking-widest opacity-60 mb-2">03</div>
+        <div class="text-sm font-semibold">Reports</div>
+        <div class="thumb-progress"></div>
+      </button>
+      <button class="thumb relative border border-current/20 rounded-2xl p-4 text-left hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors overflow-hidden" data-go="3">
+        <div class="text-[10px] uppercase tracking-widest opacity-60 mb-2">04</div>
+        <div class="text-sm font-semibold">Attribution</div>
+        <div class="thumb-progress"></div>
+      </button>
+      <button class="thumb relative border border-current/20 rounded-2xl p-4 text-left hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors overflow-hidden" data-go="4">
+        <div class="text-[10px] uppercase tracking-widest opacity-60 mb-2">05</div>
+        <div class="text-sm font-semibold">Cases</div>
+        <div class="thumb-progress"></div>
+      </button>
+      <button class="thumb relative border border-current/20 rounded-2xl p-4 text-left hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors overflow-hidden" data-go="5">
+        <div class="text-[10px] uppercase tracking-widest opacity-60 mb-2">06</div>
+        <div class="text-sm font-semibold">Methodology</div>
+        <div class="thumb-progress"></div>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STEPS ============ -->
+<section class="relative py-32 px-6 lg:px-10">
+  <div class="max-w-[1400px] mx-auto">
+    <div class="seq-scroll mb-20">
+      <div class="text-xs uppercase tracking-[0.2em] opacity-50 mb-4">— Process</div>
+      <h2 class="text-5xl lg:text-7xl tracking-tight font-bold leading-[0.95]">
+        从数据到决策<br><span class="serif">三步搞定。</span>
+      </h2>
+    </div>
+
+    <div class="space-y-2">
+      <div class="seq-scroll grid grid-cols-12 gap-6 items-center border-t border-current/10 py-10 group hover:bg-[var(--orange)] hover:text-white transition-colors -mx-4 px-4 rounded-3xl">
+        <div class="col-span-2 serif text-7xl lg:text-9xl">01</div>
+        <div class="col-span-12 md:col-span-6">
+          <h3 class="text-2xl lg:text-4xl font-bold mb-2">上传你的数据</h3>
+          <p class="opacity-70">拖拽 CSV、Excel 文件，AI 自动识别字段类型、推断业务场景。</p>
+        </div>
+        <div class="col-span-12 md:col-span-4 text-right">
+          <span class="text-sm uppercase tracking-widest opacity-60">~ 30 秒</span>
+        </div>
+      </div>
+
+      <div class="seq-scroll grid grid-cols-12 gap-6 items-center border-t border-current/10 py-10 group hover:bg-[var(--blue)] hover:text-white transition-colors -mx-4 px-4 rounded-3xl">
+        <div class="col-span-2 serif text-7xl lg:text-9xl">02</div>
+        <div class="col-span-12 md:col-span-6">
+          <h3 class="text-2xl lg:text-4xl font-bold mb-2">AI 智能诊断</h3>
+          <p class="opacity-70">大模型分析数据质量、识别异常、生成关键指标。</p>
+        </div>
+        <div class="col-span-12 md:col-span-4 text-right">
+          <span class="text-sm uppercase tracking-widest opacity-60">~ 1 分钟</span>
+        </div>
+      </div>
+
+      <div class="seq-scroll grid grid-cols-12 gap-6 items-center border-t border-current/10 py-10 group hover:bg-[var(--ink)] hover:text-white transition-colors -mx-4 px-4 rounded-3xl">
+        <div class="col-span-2 serif text-7xl lg:text-9xl">03</div>
+        <div class="col-span-12 md:col-span-6">
+          <h3 class="text-2xl lg:text-4xl font-bold mb-2">出报告 → 拍板</h3>
+          <p class="opacity-70">金字塔结构的决策报告，导出 PDF/PPT 给老板。</p>
+        </div>
+        <div class="col-span-12 md:col-span-4 text-right">
+          <span class="text-sm uppercase tracking-widest opacity-60">~ 3 分钟</span>
+        </div>
+      </div>
+      <div class="border-t border-current/10"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="relative py-32 px-6 lg:px-10 overflow-hidden">
+  <div class="seq-scroll max-w-[1400px] mx-auto text-center relative">
+    <div class="text-xs uppercase tracking-[0.2em] opacity-50 mb-4">— Ready?</div>
+    <h2 class="text-7xl lg:text-[12vw] font-bold leading-[0.85] tracking-tight mb-10">
+      Let's <br><span class="serif text-[var(--orange)]">decode</span><br>your data.
+    </h2>
+    <a href="#" class="inline-flex items-center gap-3 px-8 py-5 bg-[var(--ink)] text-[var(--bg)] rounded-full text-base font-semibold hover:bg-[var(--orange)] transition-colors">
+      免费开始 →
+    </a>
+  </div>
+</section>
+
+<footer class="border-t border-current/10 py-8 px-6 lg:px-10 flex flex-wrap items-center justify-between text-xs uppercase tracking-widest opacity-60">
+  <span>© 2026 Synthesis</span>
+  <span>Made with care · Powered by AI</span>
+</footer>
+
+<script>
+// ===== Custom cursor =====
+const halo = document.getElementById('halo');
+document.addEventListener('mousemove', (e) => {
+  halo.style.left = e.clientX + 'px';
+  halo.style.top = e.clientY + 'px';
+});
+document.querySelectorAll('a, button, .thumb').forEach(el => {
+  el.addEventListener('mouseenter', () => halo.classList.add('big'));
+  el.addEventListener('mouseleave', () => halo.classList.remove('big'));
+});
+
+// ===== Letter-by-letter title reveal =====
+function splitToLetters() {
+  const title = document.getElementById('megaTitle');
+  title.querySelectorAll('span[data-text]').forEach(span => {
+    const text = span.dataset.text;
+    const color = span.dataset.color;
+    span.innerHTML = '';
+    [...text].forEach((char, i) => {
+      const letter = document.createElement('span');
+      letter.className = 'letter';
+      letter.textContent = char === ' ' ? '\u00A0' : char;
+      if (color === 'orange') letter.style.color = 'var(--orange)';
+      span.appendChild(letter);
+    });
+  });
+}
+splitToLetters();
+
+function animateTitle() {
+  const letters = document.querySelectorAll('#megaTitle .letter');
+  letters.forEach((letter, i) => {
+    setTimeout(() => letter.classList.add('in'), 800 + i * 50);
+  });
+}
+
+// ===== Sequential element reveal on load =====
+function animateSeq() {
+  document.querySelectorAll('.seq[data-delay]').forEach(el => {
+    const delay = parseInt(el.dataset.delay) || 0;
+    setTimeout(() => el.classList.add('in'), delay);
+  });
+}
+
+window.addEventListener('load', () => {
+  animateTitle();
+  animateSeq();
+});
+
+// ===== Scroll-triggered reveal =====
+const scrollObserver = new IntersectionObserver((entries) => {
+  entries.forEach((e, i) => {
+    if (e.isIntersecting) {
+      setTimeout(() => e.target.classList.add('in'), i * 80);
+    }
+  });
+}, { threshold: 0.15 });
+
+document.querySelectorAll('.seq-scroll').forEach(el => {
+  el.classList.add('seq');
+  scrollObserver.observe(el);
+});
+
+// ===== Module auto-rotation =====
+let currentModule = 0;
+let autoTimer = null;
+const totalModules = 6;
+
+function showModule(idx) {
+  document.querySelectorAll('.module-card').forEach((card, i) => {
+    card.classList.toggle('active', i === idx);
+  });
+  document.querySelectorAll('.thumb').forEach((thumb, i) => {
+    thumb.classList.toggle('active', i === idx);
+    if (i === idx) {
+      thumb.classList.add('bg-[var(--ink)]', 'text-[var(--bg)]');
+      thumb.classList.remove('border', 'border-current/20');
+    } else {
+      thumb.classList.remove('bg-[var(--ink)]', 'text-[var(--bg)]');
+      thumb.classList.add('border', 'border-current/20');
+    }
+  });
+  currentModule = idx;
+}
+
+function startAutoRotate() {
+  clearInterval(autoTimer);
+  autoTimer = setInterval(() => {
+    currentModule = (currentModule + 1) % totalModules;
+    showModule(currentModule);
+  }, 5000);
+}
+
+document.querySelectorAll('.thumb').forEach((thumb, i) => {
+  thumb.addEventListener('click', () => {
+    showModule(i);
+    startAutoRotate();
+  });
+});
+
+// Start auto rotate when section enters viewport
+const moduleSection = document.getElementById('moduleStage');
+const moduleObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) startAutoRotate();
+    else clearInterval(autoTimer);
+  });
+}, { threshold: 0.3 });
+moduleObserver.observe(moduleSection);
+</script>
+</body>
+</html>

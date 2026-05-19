@@ -1,100 +1,112 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { BarChart3, Database, MessageSquare, Zap, Layers, Sparkles, ArrowRight, Globe } from 'lucide-react';
-import { UserGuide } from './UserGuide';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../lib/LanguageContext';
+import { UserGuide } from './UserGuide';
 
 export function Layout() {
   const location = useLocation();
-  const [time, setTime] = useState('');
   const { lang, toggleLang, t } = useLanguage();
+  const isHome = location.pathname === '/';
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setTime(now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' }));
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   const navLinks = [
+    { name: t('Analysis', '数据分析'), path: '/data' },
+    { name: t('Assistant', 'AI 助手'), path: '/assistant' },
+    { name: t('Report', '智能报告'), path: '/report' },
+    { name: t('A/B Compare', 'A/B 对比'), path: '/compare' },
     { name: t('Cases', '案例库'), path: '/cases' },
-    { name: t('Strategy', '策略专项'), path: '/strategies' },
+    { name: t('Strategy', '策略'), path: '/strategies' },
     { name: t('Methods', '方法论'), path: '/methodologies' },
-    { name: t('Analysis', '分析模拟'), path: '/data' },
-    { name: t('Compare', '横向对比'), path: '/compare' },
-    { name: t('AI.Assist', '智能助手'), path: '/assistant' },
-    { name: t('Report', '智能报表'), path: '/report' }
   ];
 
   return (
-    <div className="min-h-screen bg-transparent text-[#0F0F0F] font-sans flex flex-col relative w-full selection:bg-[#FF3B00] selection:text-white">
-      {/* Structural Minimalist Accents (Dynamic) */}
-      <div className="fixed top-1/4 left-1/4 w-[50vw] h-[50vw] bg-[#FF3B00]/5 blur-[120px] rounded-full pointer-events-none mix-blend-multiply z-0"></div>
-      <div className="fixed bottom-0 right-1/4 w-[30vw] h-[30vw] bg-[#00A3FF]/5 blur-[100px] rounded-full pointer-events-none mix-blend-multiply z-0"></div>
-      <div className="fixed inset-0 pointer-events-none bg-grid-pattern z-0 opacity-40"></div>
+    <div className="min-h-screen bg-[#F5F1EA] text-[#1A1A1A] font-sans flex flex-col relative w-full selection:bg-[#FF5722] selection:text-white">
 
-      {/* Extreme Minimalist Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[#F5F4F0]/80 backdrop-blur-md border-b border-[#0F0F0F]">
-        <div className="w-full h-14 flex items-stretch px-0">
-          
-          {/* Logo Section */}
-          <Link to="/" className="flex items-center px-6 border-r border-[#0F0F0F] hover:bg-[#0F0F0F] hover:text-[#F5F4F0] transition-colors group">
-            <span className="font-serif italic text-2xl tracking-tight leading-none pt-1">Synthesis</span>
-          </Link>
-          
-          {/* Main Nav */}
-          <nav className="hidden lg:flex items-stretch border-r border-[#0F0F0F] flex-1">
-            {navLinks.map((link) => {
-              const isActive = location.pathname.startsWith(link.path);
-              return (
-                <Link 
-                  key={link.path}
-                  to={link.path} 
-                  className={`flex items-center px-6 text-[11px] font-mono uppercase tracking-[0.1em] border-r border-[#0F0F0F] last:border-r-0 transition-colors ${
-                    isActive 
-                      ? 'bg-[#0F0F0F] text-[#F5F4F0]' 
-                      : 'hover:bg-[#EBEAE5] text-[#0F0F0F]'
-                  }`}
-                >
-                  {link.name}
-                </Link>
-              );
-            })}
-          </nav>
+      {/* Header — uses mix-blend-difference on home, solid on inner pages */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-50 ${
+          isHome
+            ? 'mix-blend-difference text-white px-6 lg:px-10 py-5 flex items-center justify-between'
+            : 'bg-[#F5F1EA]/80 backdrop-blur-xl border-b border-[#1A1A1A]/10'
+        }`}
+      >
+        {isHome ? (
+          <>
+            <Link to="/" className="flex items-baseline">
+              <span className="serif-italic text-3xl">Synthesis</span>
+              <span className="text-xl align-top">*</span>
+            </Link>
+            <nav className="hidden lg:flex gap-7 text-sm font-medium">
+              {navLinks.map(link => (
+                <Link key={link.path} to={link.path} className="ul-link">{link.name}</Link>
+              ))}
+            </nav>
+            <div className="flex items-center gap-4 text-sm">
+              <button onClick={toggleLang} className="ul-link font-medium">{lang === 'en' ? 'EN' : '中文'}</button>
+              <span className="opacity-60 hidden sm:inline text-xs uppercase tracking-[0.15em]">v 2.4 · Live</span>
+            </div>
+          </>
+        ) : (
+          <div className="max-w-[1600px] mx-auto w-full h-16 flex items-center px-4 lg:px-6">
+            {/* Logo */}
+            <Link to="/" className="flex items-baseline mr-8 group">
+              <span className="serif-italic text-2xl text-[#1A1A1A]">Synthesis</span>
+              <span className="text-lg align-top text-[#FF5722]">*</span>
+            </Link>
 
-          <div className="hidden lg:flex items-center px-6 text-[10px] font-mono text-[#0F0F0F]/60 border-l border-[#0F0F0F] uppercase">
-            {time}
+            {/* Nav */}
+            <nav className="hidden lg:flex items-center gap-1 flex-1">
+              {navLinks.map((link) => {
+                const isActive = location.pathname === link.path ||
+                  (link.path !== '/' && location.pathname.startsWith(link.path));
+                return (
+                  <Link
+                    key={link.path}
+                    to={link.path}
+                    className={`relative px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'bg-[#1A1A1A] text-[#F5F1EA]'
+                        : 'text-[#1A1A1A]/70 hover:text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+                    }`}
+                  >
+                    {link.name}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* Right Actions */}
+            <div className="flex items-center gap-3 ml-auto">
+              <button
+                onClick={toggleLang}
+                className="text-sm font-medium text-[#1A1A1A]/60 hover:text-[#1A1A1A] transition-colors"
+              >
+                {lang === 'en' ? 'EN' : '中文'}
+              </button>
+              <Link
+                to="/data"
+                className="px-4 py-2 bg-[#1A1A1A] text-[#F5F1EA] rounded-full text-sm font-semibold hover:bg-[#FF5722] transition-colors"
+              >
+                Launch →
+              </Link>
+            </div>
           </div>
-
-          <button onClick={toggleLang} className="flex items-center justify-center px-6 border-l border-[#0F0F0F] hover:bg-[#EBEAE5] transition-colors group cursor-pointer">
-            <Globe className="w-4 h-4 text-[#0F0F0F] group-hover:text-[#FF3B00] transition-colors" />
-            <span className="ml-2 font-mono text-[10px] font-bold uppercase">{lang === 'en' ? 'EN' : '中'}</span>
-          </button>
-
-          <Link to="/data" className="flex items-center px-6 text-[11px] font-mono tracking-widest bg-[#FF3B00] text-white hover:bg-[#0F0F0F] transition-colors uppercase gap-2 border-l border-[#0F0F0F]">
-            START EXPLORE
-            <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
+        )}
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 pt-14 flex flex-col relative z-10 w-full">
+      <main className={`flex-1 flex flex-col relative w-full ${isHome ? '' : 'pt-16'}`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
-            initial={{ opacity: 0, filter: "blur(4px)" }}
-            animate={{ opacity: 1, filter: "blur(0px)" }}
-            exit={{ opacity: 0, filter: "blur(4px)" }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
             className="flex-1 flex flex-col w-full h-full"
           >
             <Outlet />
@@ -102,12 +114,6 @@ export function Layout() {
         </AnimatePresence>
       </main>
 
-      {/* Site Frame borders */}
-      <div className="fixed top-0 bottom-0 left-0 w-6 border-r border-[#0F0F0F] bg-[#F5F4F0]/80 backdrop-blur-md z-40 hidden xl:flex items-center justify-center pointer-events-none">
-         <span className="transform -rotate-90 text-[9px] font-mono tracking-[0.2em] uppercase whitespace-nowrap opacity-40">System Env :: 01</span>
-      </div>
-      <div className="fixed top-0 bottom-0 right-0 w-6 border-l border-[#0F0F0F] bg-[#F5F4F0]/80 backdrop-blur-md z-40 hidden xl:block pointer-events-none"></div>
-      
       <UserGuide />
     </div>
   );

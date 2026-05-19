@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { eCommerceSampleData } from '../data/ecommerce_sample';
 import { fetchChatStream } from '../lib/api';
+import { RateLimitBanner } from '../components/RateLimitBanner';
 import { exportToPDF, exportToPPT, shareReport } from '../lib/exportUtils';
 import { Share2, Presentation } from 'lucide-react';
 import { buildSystemPrompt } from '../prompts';
@@ -214,7 +215,7 @@ export function SmartReport() {
   const [originalMetadata, setOriginalMetadata] = useState<any>(null);
   const [originalRawData, setOriginalRawData] = useState<any[]>([]);
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState('standard_bi');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('pyramid_business');
   const [templates, setTemplates] = useState(() => listAllTemplates());
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
 
@@ -234,23 +235,30 @@ export function SmartReport() {
   }, [reportMarkdown, REPORT_STAGES]);
 
   useEffect(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get('from') === 'data-analysis') {
-      const raw = sessionStorage.getItem('dc_pending_dataset');
-      if (raw) {
-        try {
-          const payload = JSON.parse(raw);
-          sessionStorage.removeItem('dc_pending_dataset');
-          setUploadedFileName(payload.fileName + (payload._truncated ? ' (前5000行采样)' : ''));
-          const meta = extractMetadata(payload.data, { fields: payload.columns.map((c: any) => c.key) });
-          setOriginalMetadata(meta);
-          setOriginalRawData(payload.data);
-          generateReport(meta, payload.data, false);
-        } catch (e) {
-          console.error('Restore from DataAnalysis failed', e);
-        }
+    let cancelled = false;
+    const tryRestore = () => {
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('from') !== 'data-analysis') return;
+        const raw = sessionStorage.getItem('dc_pending_dataset');
+        if (!raw) return;
+        const payload = JSON.parse(raw);
+        sessionStorage.removeItem('dc_pending_dataset');
+        if (cancelled) return;
+        setUploadedFileName(payload.fileName + (payload._truncated ? ' (前5000行采样)' : ''));
+        const meta = extractMetadata(payload.data, { fields: payload.columns.map((c: any) => c.key) });
+        setOriginalMetadata(meta);
+        setOriginalRawData(payload.data);
+        // Defer the generateReport call to avoid race with React 19 StrictMode double-mount
+        setTimeout(() => {
+          if (!cancelled) generateReport(meta, payload.data, false);
+        }, 0);
+      } catch (e) {
+        console.error('Restore from DataAnalysis failed', e);
       }
-    }
+    };
+    tryRestore();
+    return () => { cancelled = true; };
   }, []);
 
   const extractMetadata = (parsedData: any[], meta: any) => {
@@ -355,11 +363,65 @@ export function SmartReport() {
     const tpl = templates.find(t => t.id === selectedTemplateId) || templates[0];
     const sectionList = tpl.sections.map((s, i) => `## ${i + 1}. ${s.title}\n（章节要点：${s.hint}）`).join('\n\n');
 
-    const sysPrompt = buildSystemPrompt('report') + `\n\n你是企业级 BI 报告引擎。本次报告必须严格按以下章节结构输出（不要增减章节，不要改章节标题）：
+    const isPyramid = selectedTemplateId === 'pyramid_business';
+
+    const pyramidInstructions = isPyramid ? `
+
+【金字塔原理输出规范】
+
+## 1. 核心结论与行动建议
+格式要求：
+- 开头用一个加粗的"一句话结论"（不超过 30 字），概括整份数据最重要的业务信号
+- 然后用表格列出 P0/P1/P2 行动建议：
+  | 优先级 | 行动 | 预期收益 | 负责方 | 时间线 |
+- P0 = 本周必须做（止血/抓住窗口期）
+- P1 = 两周内启动（结构性改善）
+- P2 = 月度规划（长期建设）
+- 每个行动用 ICE 评分（Impact/Confidence/Ease 各 1-10 分）排序
+
+## 2. 关键发现（支撑论据）
+格式要求：
+- 列出 3-5 个关键发现，每个发现用以下结构：
+  ### 发现 N：[一句话结论]
+  **数据事实**：具体数字是什么
+  **业务解读**：这意味着什么（So What?）
+  **建议行动**：应该怎么做（Now What?）
+  [配一个图表]
+- 发现之间要有逻辑关系（因果/并列/递进），不是随机罗列
+
+## 3. 业务全景看板
+格式要求：
+- 先给出 4-6 个核心 KPI 的"数字卡片"（当前值 + 环比变化 + 健康状态）
+- 然后配 2-3 个趋势/结构图表
+- KPI 分四类：规模（量有多大）、效率（转化有多快）、质量（体验有多好）、结构（组成是否健康）
+
+## 4. 归因分析与根因拆解
+格式要求：
+- 选取最重要的 1-2 个指标，做维度下钻
+- 用瀑布图展示"谁贡献了增长/谁拖了后腿"
+- 回答"为什么会这样"而不只是"发生了什么"
+
+## 5. 风险预警与数据质量
+格式要求：
+- 明确告诉决策者：哪些结论置信度高可以直接用，哪些需要进一步验证
+- 列出数据盲区（这份数据回答不了什么问题）
+- 如果有异常值或数据质量问题，说明对结论的影响程度
+
+## 6. 附录：数据明细与方法论
+格式要求：
+- 字段说明表
+- 样本量与时间范围
+- 分析方法说明
+- 局限性声明
+` : '';
+
+    const sysPrompt = buildSystemPrompt('report') + `\n\n你是企业级商业分析顾问。本次报告必须严格按以下章节结构输出（不要增减章节，不要改章节标题）：
 
 # ${tpl.name}
 
 ${sectionList}
+
+${pyramidInstructions}
 
 每节请给出充实内容（300-600 字 + 必要的图表 chart 代码块）。
 
@@ -369,9 +431,9 @@ CRITICAL: You MUST respond strictly in ${lang === 'en' ? 'English' : 'Chinese'}.
 
 1. 只能使用上传数据中真实存在的字段，严禁编造字段。
 2. 如果某个指标缺少必要字段，必须说明无法计算原因，并给出替代指标。
-3. 指标不能只是简单 SUM/AVG，必须贴近业务场景，覆盖规模、效率、质量、结构四类。
-4. 看板必须按照相应的结构逻辑生成。
-5. 每个图表必须说明图表类型、使用字段、X轴、Y轴、聚合方式、筛选字段、排序方式、联动方式和业务目的。
+3. 业务大于技术：先说"对生意意味着什么"，再说"数据是怎么算的"。
+4. 每个图表必须服务于一个明确的业务论点，不要为了展示而展示。
+5. 结论必须可执行：不要说"建议优化转化率"，要说"建议在结账页增加微信支付入口，预计提升转化率 3-5%"。
 6. [非常重要 - 动态图表能力]：为了让报告更直观，请你在报告的相应部分，直接插入一个 \`\`\`chart 的代码块，我们在前端将会利用 react-markdown 拦截并渲染为酷炫的高级图表面板！
 代码块内必须是一个纯JSON对象，支持的 type 与对应数据格式如下：
 
@@ -508,7 +570,7 @@ ${target.body}`;
     setRewriteHint('');
   };
 
-  const MarkdownComponents: Components = {
+  const MarkdownComponents: Components = useMemo(() => ({
     code({ node, inline, className, children, ...props }: any) {
       const match = /language-(\w+)/.exec(className || '');
       const isChart = match && match[1] === 'chart';
@@ -543,7 +605,7 @@ ${target.body}`;
     confidence: ({ level, basis, risk }: any) => {
       return <ConfidenceBadge level={level} basis={basis} risk={risk} />;
     }
-  };
+  }), []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -554,25 +616,23 @@ ${target.body}`;
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F5F4F0] pt-24 pb-20 px-6 lg:px-12">
-      <div className="max-w-6xl mx-auto space-y-12">
+    <div className="min-h-screen bg-[#F5F1EA] pt-20 pb-16 px-4 lg:px-8">
+      <div className="max-w-6xl mx-auto space-y-8">
 
         {/* Header */}
-        <header className="flex flex-col gap-6 w-full max-w-4xl pt-8">
-           {new URL(window.location.href).searchParams.get('from') === 'data-analysis' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-widest rounded-full mb-4 w-max">
+        <header className="flex flex-col gap-3 w-full max-w-4xl">
+           {(() => { try { return new URL(window.location.href).searchParams.get('from') === 'data-analysis'; } catch { return false; } })() && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#FF5722]/10 text-[#FF5722] text-[11px] font-medium rounded-md mb-2 w-max border border-[#FF5722]/20">
                 <FileText className="w-3 h-3" />
-                📨 从数据探索作战室继承数据集
+                从数据分析继承数据集
               </span>
            )}
-           <div className="flex items-center gap-3">
-             <span className="w-10 h-10 bg-[#FF3B00] rounded-xl flex items-center justify-center shrink-0">
-               <LayoutTemplate className="w-5 h-5 text-white" />
-             </span>
-             <h1 className="text-4xl lg:text-5xl font-serif text-[#0F0F0F] italic tracking-tight">Smart Report Generator</h1>
-           </div>
-           <p className="text-lg text-gray-600 leading-relaxed font-medium">
-             Upload your dataset. Our enterprise-grade engine automatically infers business intent, calculates data quality, builds semantic models, and designs a comprehensive reporting dashboard complete with actionable business strategy.
+           <div className="text-xs uppercase tracking-[0.2em] opacity-50">— Smart Report</div>
+           <h1 className="text-4xl lg:text-6xl tracking-tight font-bold leading-[0.95]">
+             Pyramid <span className="serif-italic text-[#FF5722]">Reports</span>
+           </h1>
+           <p className="text-base text-[#1A1A1A]/60 leading-relaxed max-w-2xl mt-2">
+             上传数据，自动生成金字塔原理结构的业务分析报告。结论先行、论据支撑、数据佐证。
            </p>
         </header>
 
@@ -699,42 +759,42 @@ ${target.body}`;
            </div>
         )}
 
-        {/* Results */}
+        {/* Results - Two Column Layout */}
         {reportMarkdown && (
            <motion.div 
              initial={{ opacity: 0, y: 20 }}
              animate={{ opacity: 1, y: 0 }}
-             className="grid grid-cols-1 xl:grid-cols-12 gap-8"
+             className="flex flex-col gap-4"
            >
               {expressMode && !isAnalyzing && (
-                <div className="bg-amber-100/50 border border-amber-200 text-amber-900 rounded-2xl p-4 mb-6 flex items-center justify-between shadow-sm xl:col-span-12">
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 flex items-center justify-between">
                    <div className="flex items-center gap-2">
-                     <Zap className="w-5 h-5 text-amber-500" />
-                     <span className="font-medium text-sm">这是快速预览版。你可以基于此确认数据方向。</span>
+                     <Zap className="w-4 h-4 text-amber-500" />
+                     <span className="font-medium text-sm">快速预览版，可基于此确认数据方向。</span>
                    </div>
                    <button 
                      onClick={() => { setExpressMode(false); generateReport(originalMetadata, originalRawData, false); }} 
-                     className="px-4 py-2 bg-white rounded-lg text-sm font-bold border border-amber-300 hover:bg-amber-50 transition-colors shadow-sm"
+                     className="px-3 py-1.5 bg-white rounded-lg text-xs font-bold border border-amber-300 hover:bg-amber-50 transition-colors"
                    >
-                     升级到完整报告 (7 段结构)
+                     升级完整报告
                    </button>
                 </div>
               )}
 
               {isAnalyzing && rewritingSectionIdx === null && (
-                 <div className="bg-[#0F0F0F] rounded-2xl p-4 shadow-xl flex items-center justify-between xl:col-span-12 sticky top-4 z-50">
+                 <div className="bg-gray-900 rounded-xl p-3 flex items-center justify-between sticky top-16 z-40">
                     <div className="flex items-center gap-3">
-                       <Loader2 className="w-5 h-5 text-[#FF3B00] animate-spin" />
-                       <span className="text-white font-mono text-sm tracking-widest uppercase">Generating...</span>
+                       <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+                       <span className="text-white text-sm font-medium">正在生成报告...</span>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                        {REPORT_STAGES.map(s => {
                           const isDone = s.id <= reachedStageId;
                           const isCurrent = s.id === reachedStageId + 1;
                           return (
-                            <div key={s.id} className="flex items-center gap-2">
-                               <div className={`w-2 h-2 rounded-full ${isDone ? 'bg-green-500' : isCurrent ? 'bg-[#FF3B00] animate-pulse' : 'bg-gray-600'}`}></div>
-                               <span className={`text-[10px] font-mono hidden md:inline-block ${isDone ? 'text-green-500' : isCurrent ? 'text-white' : 'text-gray-500'}`}>{s.label}</span>
+                            <div key={s.id} className="flex items-center gap-1.5">
+                               <div className={`w-1.5 h-1.5 rounded-full ${isDone ? 'bg-emerald-400' : isCurrent ? 'bg-indigo-400 animate-pulse' : 'bg-gray-600'}`}></div>
+                               <span className={`text-[10px] hidden lg:inline-block ${isDone ? 'text-emerald-400' : isCurrent ? 'text-white' : 'text-gray-500'}`}>{s.label}</span>
                             </div>
                           );
                        })}
@@ -742,35 +802,33 @@ ${target.body}`;
                  </div>
               )}
 
-              <div id="report-content-panel" className="xl:col-span-9 bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden">
-                 <div className="bg-[#0F0F0F] text-[#F5F4F0] px-8 py-6 flex items-center justify-between sticky top-0 z-10 shadow-md">
-                   <div className="flex items-center gap-3">
-                     <BarChart2 className="w-6 h-6 text-[#FF3B00]" />
-                     <div>
-                       <h2 className="font-serif italic text-xl tracking-wide">Enterprise BI Blueprint</h2>
-                       <p className="font-mono text-[10px] text-gray-400 mt-1 uppercase tracking-widest">Dataset: {uploadedFileName}</p>
-                     </div>
+              <div id="report-content-panel" className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                 <div className="px-8 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                   <div>
+                     <h2 className="text-lg font-semibold text-gray-900">业务决策报告</h2>
+                     <p className="text-xs text-gray-500 mt-0.5">{uploadedFileName} · 金字塔原理结构</p>
                    </div>
                    {!isAnalyzing && (
-                     <div className="hidden md:flex gap-1.5 opacity-50">
+                     <div className="flex gap-1">
                         {REPORT_STAGES.map(s => (
-                           <div key={s.id} className="w-1.5 h-1.5 rounded-full bg-white transition-opacity" title={s.label}></div>
+                           <div key={s.id} className={`w-2 h-2 rounded-full ${s.id <= reachedStageId ? 'bg-emerald-400' : 'bg-gray-200'}`} title={s.label}></div>
                         ))}
                      </div>
                    )}
                  </div>
                  
-                 <div className="p-8 lg:p-12 prose prose-slate prose-lg max-w-none 
-                    prose-headings:font-serif prose-headings:font-normal prose-headings:tracking-tight 
-                    prose-h1:text-3xl prose-h2:text-2xl prose-h2:mt-12 prose-h2:mb-6 prose-h2:pb-2 prose-h2:border-b prose-h2:border-gray-100
-                    prose-h3:text-xl prose-h3:mt-8 
-                    prose-a:text-[#FF3B00] 
-                    prose-blockquote:border-l-4 prose-blockquote:border-[#FF3B00] prose-blockquote:bg-orange-50 prose-blockquote:py-2 prose-blockquote:px-6 prose-blockquote:rounded-r-xl prose-blockquote:font-medium prose-blockquote:italic
+                 <div className="p-8 lg:p-10 prose prose-slate prose-base max-w-none 
+                    prose-headings:font-semibold prose-headings:tracking-tight 
+                    prose-h1:text-2xl prose-h2:text-xl prose-h2:mt-10 prose-h2:mb-4 prose-h2:pb-3 prose-h2:border-b prose-h2:border-gray-100
+                    prose-h3:text-lg prose-h3:mt-6 
+                    prose-a:text-[#FF5722] prose-a:no-underline hover:prose-a:underline
+                    prose-blockquote:border-l-4 prose-blockquote:border-[#FF5722] prose-blockquote:bg-[#FF5722]/5 prose-blockquote:py-2 prose-blockquote:px-5 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
                     prose-table:w-full prose-table:text-sm
-                    prose-th:bg-gray-50 prose-th:p-4 prose-th:text-left prose-th:font-semibold prose-th:uppercase prose-th:text-[10px] prose-th:tracking-wider prose-th:text-gray-500
-                    prose-td:p-4 prose-td:border-b prose-td:border-gray-100 prose-td:align-top
-                    prose-li:marker:text-[#FF3B00]
-                    prose-strong:font-semibold prose-strong:text-gray-900"
+                    prose-th:bg-gray-50 prose-th:p-3 prose-th:text-left prose-th:font-semibold prose-th:text-xs prose-th:uppercase prose-th:tracking-wider prose-th:text-gray-500
+                    prose-td:p-3 prose-td:border-b prose-td:border-gray-100 prose-td:align-top
+                    prose-li:marker:text-[#FF5722]
+                    prose-strong:font-semibold prose-strong:text-gray-900
+                    prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-normal"
                  >
                     {isAnalyzing && rewritingSectionIdx === null ? (
                       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={MarkdownComponents}>
@@ -835,8 +893,8 @@ ${target.body}`;
               </div>
 
               <div className="xl:col-span-3">
-                  <div className="sticky top-8 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm flex flex-col gap-6">
-                    <h3 className="font-serif italic text-lg border-b border-gray-100 pb-4">Actions</h3>
+                  <div className="sticky top-20 bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-5">
+                    <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-3">导出与操作</h3>
                     
                     {(() => {
                        const lowCount = countLowConfidence(reportMarkdown);
@@ -915,9 +973,9 @@ ${target.body}`;
                     </div>
                     
                     <div className="mt-4 p-4 bg-gray-50 rounded-xl space-y-2">
-                       <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-gray-500">Methodology</h4>
+                       <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-gray-500">方法论</h4>
                        <p className="text-xs text-gray-500 leading-relaxed">
-                         This blueprint acts as an exact specification for frontend engineers and data teams to construct robust, actionable dashboards. 
+                         本报告遵循《金字塔原理》结构：结论先行 → 以上统下 → 归类分组 → 逻辑递进。业务大于技术，每个数据点都服务于可执行的商业决策。
                        </p>
                     </div>
                  </div>

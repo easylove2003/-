@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Home } from './pages/Home';
 import { Cases } from './pages/Cases';
 import { Strategies } from './pages/Strategies';
@@ -50,7 +51,7 @@ export default function App() {
             <Route path="methodologies" element={<Methodologies />} />
             <Route path="data" element={<DataAnalysis />} />
             <Route path="assistant" element={<AIAssistant />} />
-            <Route path="report" element={<SmartReport />} />
+            <Route path="report" element={<ErrorBoundary><SmartReport /></ErrorBoundary>} />
             <Route path="compare" element={<DataCompare />} />
           </Route>
           {/* Shared report view without layout */}

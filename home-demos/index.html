@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>首页方案对比 Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { scroll-behavior: smooth; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .demo-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: #111; display: flex; gap: 0; }
+  .demo-nav a { color: #999; padding: 14px 24px; font-size: 13px; font-weight: 600; text-decoration: none; border-right: 1px solid #333; transition: all 0.2s; }
+  .demo-nav a:hover, .demo-nav a.active { color: #fff; background: #4f46e5; }
+  section.demo { min-height: 100vh; padding-top: 60px; }
+</style>
+</head>
+<body class="bg-gray-100">
+
+<nav class="demo-nav">
+  <a href="#demo-a" class="active">方案 A：Tab 切换式</a>
+  <a href="#demo-b">方案 B：轮播卡片</a>
+  <a href="#demo-c">方案 C：紧凑网格</a>
+</nav>
+
+<!-- ============================================ -->
+<!-- DEMO A: Tab 切换式（左侧列表 + 右侧预览） -->
+<!-- ============================================ -->
+<section id="demo-a" class="demo bg-white">
+  <div class="max-w-6xl mx-auto px-6 py-16">
+    <!-- Hero -->
+    <div class="text-center mb-16">
+      <h1 class="text-4xl md:text-5xl font-bold text-gray-900 tracking-tight mb-4">
+        让数据说话，用 AI 做决策
+      </h1>
+      <p class="text-lg text-gray-500 max-w-2xl mx-auto mb-8">
+        上传数据 → AI 自动分析 → 生成可执行的商业洞察报告。无需写代码，5 分钟搞定。
+      </p>
+      <div class="flex justify-center gap-3">
+        <a href="/data" class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
+          免费开始分析 →
+        </a>
+        <a href="/cases" class="px-6 py-3 bg-white text-gray-700 rounded-lg font-semibold border border-gray-200 hover:border-gray-300 transition-colors">
+          查看案例
+        </a>
+      </div>
+    </div>
+
+    <!-- Tab Section -->
+    <div class="flex flex-col lg:flex-row gap-0 bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden shadow-sm min-h-[480px]">
+      <!-- Left: Tab List -->
+      <div class="lg:w-[280px] shrink-0 border-r border-gray-200 bg-white" id="tabList">
+        <div class="p-2">
+          <button onclick="switchTab(0)" class="tab-btn active w-full text-left px-4 py-4 rounded-xl transition-all flex items-start gap-3">
+            <span class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 text-sm font-bold">📊</span>
+            <div>
+              <div class="font-semibold text-sm text-gray-900">数据分析</div>
+              <div class="text-xs text-gray-500 mt-0.5">上传 CSV/Excel，自动诊断</div>
+            </div>
+          </button>
+          <button onclick="switchTab(1)" class="tab-btn w-full text-left px-4 py-4 rounded-xl transition-all flex items-start gap-3">
+            <span class="w-8 h-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 text-sm font-bold">✨</span>
+            <div>
+              <div class="font-semibold text-sm text-gray-900">AI 助手</div>
+              <div class="text-xs text-gray-500 mt-0.5">自然语言问答，即时洞察</div>
+            </div>
+          </button>
+          <button onclick="switchTab(2)" class="tab-btn w-full text-left px-4 py-4 rounded-xl transition-all flex items-start gap-3">
+            <span class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 text-sm font-bold">📋</span>
+            <div>
+              <div class="font-semibold text-sm text-gray-900">智能报告</div>
+              <div class="text-xs text-gray-500 mt-0.5">金字塔原理，一键生成</div>
+            </div>
+          </button>
+          <button onclick="switchTab(3)" class="tab-btn w-full text-left px-4 py-4 rounded-xl transition-all flex items-start gap-3">
+            <span class="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 text-sm font-bold">⚖️</span>
+            <div>
+              <div class="font-semibold text-sm text-gray-900">对比归因</div>
+              <div class="text-xs text-gray-500 mt-0.5">多维度下钻，找到根因</div>
+            </div>
+          </button>
+          <button onclick="switchTab(4)" class="tab-btn w-full text-left px-4 py-4 rounded-xl transition-all flex items-start gap-3">
+            <span class="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 text-sm font-bold">📚</span>
+            <div>
+              <div class="font-semibold text-sm text-gray-900">案例库</div>
+              <div class="text-xs text-gray-500 mt-0.5">20+ 真实电商分析案例</div>
+            </div>
+          </button>
+          <button onclick="switchTab(5)" class="tab-btn w-full text-left px-4 py-4 rounded-xl transition-all flex items-start gap-3">
+            <span class="w-8 h-8 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center shrink-0 text-sm font-bold">💡</span>
+            <div>
+              <div class="font-semibold text-sm text-gray-900">方法论</div>
+              <div class="text-xs text-gray-500 mt-0.5">RFM、AARRR、5Why 等框架</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right: Preview -->
+      <div class="flex-1 p-8 flex flex-col justify-center" id="tabContent">
+        <div class="tab-panel active" data-idx="0">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-3 h-3 rounded-full bg-red-400"></div>
+              <div class="w-3 h-3 rounded-full bg-yellow-400"></div>
+              <div class="w-3 h-3 rounded-full bg-green-400"></div>
+            </div>
+            <div class="space-y-3">
+              <div class="h-4 bg-gray-100 rounded w-3/4"></div>
+              <div class="h-4 bg-gray-100 rounded w-1/2"></div>
+              <div class="grid grid-cols-3 gap-3 mt-6">
+                <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-center">
+                  <div class="text-2xl font-bold text-indigo-600">150</div>
+                  <div class="text-xs text-gray-500 mt-1">数据行</div>
+                </div>
+                <div class="bg-emerald-50 border border-emerald-100 rounded-lg p-4 text-center">
+                  <div class="text-2xl font-bold text-emerald-600">14</div>
+                  <div class="text-xs text-gray-500 mt-1">字段</div>
+                </div>
+                <div class="bg-amber-50 border border-amber-100 rounded-lg p-4 text-center">
+                  <div class="text-2xl font-bold text-amber-600">92</div>
+                  <div class="text-xs text-gray-500 mt-1">质量分</div>
+                </div>
+              </div>
+              <div class="mt-4 h-32 bg-gradient-to-r from-indigo-50 to-violet-50 rounded-lg flex items-center justify-center text-gray-400 text-sm">
+                📈 自动生成趋势图表
+              </div>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 mt-4 leading-relaxed">拖拽上传 CSV/Excel 文件，AI 自动识别字段类型、检测异常值、生成数据质量报告，并支持自然语言 SQL 查询。</p>
+        </div>
+        <div class="tab-panel hidden" data-idx="1">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <div class="space-y-4">
+              <div class="flex gap-3">
+                <div class="w-8 h-8 rounded-full bg-gray-200 shrink-0"></div>
+                <div class="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-gray-700 max-w-[80%]">哪个品类的利润率最高？</div>
+              </div>
+              <div class="flex gap-3 justify-end">
+                <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 text-sm max-w-[80%]">
+                  Electronics 品类利润率最高，达 18.2%，主要由 Laptop 和 Smartphone 贡献。建议加大该品类的营销投入。
+                </div>
+                <div class="w-8 h-8 rounded-full bg-indigo-100 shrink-0 flex items-center justify-center text-xs">AI</div>
+              </div>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 mt-4 leading-relaxed">像和分析师对话一样提问，AI 自动写 SQL、跑查询、生成图表，并给出业务建议。</p>
+        </div>
+        <div class="tab-panel hidden" data-idx="2">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <div class="border-b border-gray-100 pb-3 mb-4">
+              <div class="text-lg font-semibold text-gray-900">业务决策报告</div>
+              <div class="text-xs text-gray-400">金字塔原理结构 · 6 个章节</div>
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-lg"><span class="w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center">✓</span><span class="text-sm">核心结论与行动建议</span></div>
+              <div class="flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-lg"><span class="w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center">✓</span><span class="text-sm">关键发现（支撑论据）</span></div>
+              <div class="flex items-center gap-2 px-3 py-2 bg-indigo-50 rounded-lg"><span class="w-5 h-5 rounded-full bg-indigo-500 text-white text-[10px] flex items-center justify-center animate-pulse">⋯</span><span class="text-sm">业务全景看板</span></div>
+              <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg"><span class="w-5 h-5 rounded-full bg-gray-200 text-gray-400 text-[10px] flex items-center justify-center">4</span><span class="text-sm text-gray-400">归因分析与根因拆解</span></div>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 mt-4 leading-relaxed">结论先行、论据支撑、数据佐证。管理层看第一页就能拍板，执行层知道怎么做。支持导出 PDF/PPT。</p>
+        </div>
+        <div class="tab-panel hidden" data-idx="3">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm text-center">
+            <div class="text-6xl mb-4">⚖️</div>
+            <div class="text-lg font-semibold mb-2">多维度归因分析</div>
+            <p class="text-sm text-gray-500">对比不同时间段、不同渠道、不同人群的表现差异，找到增长/下降的根本原因。</p>
+          </div>
+          <p class="text-sm text-gray-600 mt-4 leading-relaxed">支持瀑布图归因、辛普森悖论检测、维度下钻，让你不只知道"发生了什么"，更知道"为什么"。</p>
+        </div>
+        <div class="tab-panel hidden" data-idx="4">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm text-center">
+            <div class="text-6xl mb-4">📚</div>
+            <div class="text-lg font-semibold mb-2">20+ 真实电商案例</div>
+            <p class="text-sm text-gray-500">从新手到高阶，覆盖 AARRR、RFM、复购分析、渠道归因等核心场景。</p>
+          </div>
+          <p class="text-sm text-gray-600 mt-4 leading-relaxed">每个案例包含完整的分析思路、数据样本、结论输出，可以直接套用到你的业务中。</p>
+        </div>
+        <div class="tab-panel hidden" data-idx="5">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm text-center">
+            <div class="text-6xl mb-4">💡</div>
+            <div class="text-lg font-semibold mb-2">专业分析方法论</div>
+            <p class="text-sm text-gray-500">RFM 用户分层、AARRR 增长模型、5Why 根因分析、DID 因果推断...</p>
+          </div>
+          <p class="text-sm text-gray-600 mt-4 leading-relaxed">不只是工具，更教你怎么思考。每个方法论配有适用场景说明和一键应用按钮。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>
+
+<!-- ============================================ -->
+<!-- DEMO B: 轮播卡片（可见3张 + 左右切换） -->
+<!-- ============================================ -->
+<section id="demo-b" class="demo bg-gray-50">
+  <div class="max-w-6xl mx-auto px-6 py-16">
+    <!-- Hero -->
+    <div class="text-center mb-12">
+      <h1 class="text-4xl md:text-5xl font-bold text-gray-900 tracking-tight mb-4">
+        AI 驱动的数据分析平台
+      </h1>
+      <p class="text-lg text-gray-500 max-w-xl mx-auto mb-8">
+        从数据上传到商业决策，全流程 AI 加速
+      </p>
+      <a href="/data" class="inline-flex px-6 py-3 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 transition-colors">
+        开始使用 →
+      </a>
+    </div>
+
+    <!-- Carousel -->
+    <div class="relative">
+      <div class="overflow-hidden rounded-2xl" id="carousel">
+        <div class="flex transition-transform duration-500 ease-out" id="carouselTrack" style="transform: translateX(0)">
+          <!-- Card 1 -->
+          <div class="w-full md:w-1/3 shrink-0 px-3">
+            <div class="bg-white rounded-xl border border-gray-200 p-6 h-[320px] flex flex-col hover:shadow-lg transition-shadow">
+              <div class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl mb-4">📊</div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">数据分析</h3>
+              <p class="text-sm text-gray-500 flex-1">上传 CSV/Excel，AI 自动诊断数据质量、识别异常、生成统计报告。</p>
+              <a href="/data" class="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">进入 →</a>
+            </div>
+          </div>
+          <!-- Card 2 -->
+          <div class="w-full md:w-1/3 shrink-0 px-3">
+            <div class="bg-white rounded-xl border border-gray-200 p-6 h-[320px] flex flex-col hover:shadow-lg transition-shadow">
+              <div class="w-12 h-12 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center text-xl mb-4">✨</div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">AI 助手</h3>
+              <p class="text-sm text-gray-500 flex-1">用自然语言提问，AI 自动写 SQL、跑查询、生成图表并给出业务建议。</p>
+              <a href="/assistant" class="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">进入 →</a>
+            </div>
+          </div>
+          <!-- Card 3 -->
+          <div class="w-full md:w-1/3 shrink-0 px-3">
+            <div class="bg-white rounded-xl border border-gray-200 p-6 h-[320px] flex flex-col hover:shadow-lg transition-shadow">
+              <div class="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl mb-4">📋</div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">智能报告</h3>
+              <p class="text-sm text-gray-500 flex-1">金字塔原理结构，结论先行。一键生成可导出的 PDF/PPT 商业报告。</p>
+              <a href="/report" class="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">进入 →</a>
+            </div>
+          </div>
+          <!-- Card 4 -->
+          <div class="w-full md:w-1/3 shrink-0 px-3">
+            <div class="bg-white rounded-xl border border-gray-200 p-6 h-[320px] flex flex-col hover:shadow-lg transition-shadow">
+              <div class="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-xl mb-4">⚖️</div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">对比归因</h3>
+              <p class="text-sm text-gray-500 flex-1">多维度下钻归因，瀑布图展示贡献度，找到增长或下降的根本原因。</p>
+              <a href="/compare" class="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">进入 →</a>
+            </div>
+          </div>
+          <!-- Card 5 -->
+          <div class="w-full md:w-1/3 shrink-0 px-3">
+            <div class="bg-white rounded-xl border border-gray-200 p-6 h-[320px] flex flex-col hover:shadow-lg transition-shadow">
+              <div class="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl mb-4">📚</div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">案例库</h3>
+              <p class="text-sm text-gray-500 flex-1">20+ 真实电商分析案例，从新手到高阶，覆盖核心业务场景。</p>
+              <a href="/cases" class="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">进入 →</a>
+            </div>
+          </div>
+          <!-- Card 6 -->
+          <div class="w-full md:w-1/3 shrink-0 px-3">
+            <div class="bg-white rounded-xl border border-gray-200 p-6 h-[320px] flex flex-col hover:shadow-lg transition-shadow">
+              <div class="w-12 h-12 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center text-xl mb-4">💡</div>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">方法论</h3>
+              <p class="text-sm text-gray-500 flex-1">RFM、AARRR、5Why、DID 等专业分析框架，一键应用到你的数据。</p>
+              <a href="/methodologies" class="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">进入 →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Arrows -->
+      <button onclick="moveCarousel(-1)" class="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 w-10 h-10 bg-white border border-gray-200 rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 text-gray-600">←</button>
+      <button onclick="moveCarousel(1)" class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 w-10 h-10 bg-white border border-gray-200 rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 text-gray-600">→</button>
+    </div>
+    <!-- Dots -->
+    <div class="flex justify-center gap-2 mt-6" id="carouselDots">
+      <button onclick="goToSlide(0)" class="w-2 h-2 rounded-full bg-gray-900"></button>
+      <button onclick="goToSlide(1)" class="w-2 h-2 rounded-full bg-gray-300"></button>
+      <button onclick="goToSlide(2)" class="w-2 h-2 rounded-full bg-gray-300"></button>
+      <button onclick="goToSlide(3)" class="w-2 h-2 rounded-full bg-gray-300"></button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ -->
+<!-- DEMO C: 紧凑网格（2x3 小卡片 + 大 Hero） -->
+<!-- ============================================ -->
+<section id="demo-c" class="demo bg-white">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <!-- Compact Hero -->
+    <div class="mb-12">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-sm">
+          <span class="text-white text-lg">📊</span>
+        </div>
+        <span class="text-sm font-semibold text-gray-500">Synthesis · AI 数据分析平台</span>
+      </div>
+      <h1 class="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight mb-3">
+        5 分钟，从数据到决策
+      </h1>
+      <p class="text-base text-gray-500 max-w-lg mb-6">
+        上传你的业务数据，AI 自动完成诊断、分析、归因、出报告。不需要写代码，不需要懂统计。
+      </p>
+      <a href="/data" class="inline-flex px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm">
+        上传数据，免费试用 →
+      </a>
+    </div>
+
+    <!-- Compact 2x3 Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <a href="/data" class="group flex items-start gap-4 p-5 rounded-xl border border-gray-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/30 transition-all">
+        <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">📊</div>
+        <div>
+          <div class="font-semibold text-sm text-gray-900 mb-1">数据分析</div>
+          <div class="text-xs text-gray-500 leading-relaxed">上传文件，自动诊断质量、识别异常、NL2SQL 查询</div>
+        </div>
+      </a>
+      <a href="/assistant" class="group flex items-start gap-4 p-5 rounded-xl border border-gray-200 bg-white hover:border-violet-200 hover:bg-violet-50/30 transition-all">
+        <div class="w-10 h-10 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">✨</div>
+        <div>
+          <div class="font-semibold text-sm text-gray-900 mb-1">AI 助手</div>
+          <div class="text-xs text-gray-500 leading-relaxed">自然语言对话，自动生成图表和业务建议</div>
+        </div>
+      </a>
+      <a href="/report" class="group flex items-start gap-4 p-5 rounded-xl border border-gray-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/30 transition-all">
+        <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">📋</div>
+        <div>
+          <div class="font-semibold text-sm text-gray-900 mb-1">智能报告</div>
+          <div class="text-xs text-gray-500 leading-relaxed">金字塔原理结构，导出 PDF/PPT</div>
+        </div>
+      </a>
+      <a href="/compare" class="group flex items-start gap-4 p-5 rounded-xl border border-gray-200 bg-white hover:border-amber-200 hover:bg-amber-50/30 transition-all">
+        <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">⚖️</div>
+        <div>
+          <div class="font-semibold text-sm text-gray-900 mb-1">对比归因</div>
+          <div class="text-xs text-gray-500 leading-relaxed">瀑布图归因，找到增长/下降根因</div>
+        </div>
+      </a>
+      <a href="/cases" class="group flex items-start gap-4 p-5 rounded-xl border border-gray-200 bg-white hover:border-rose-200 hover:bg-rose-50/30 transition-all">
+        <div class="w-10 h-10 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">📚</div>
+        <div>
+          <div class="font-semibold text-sm text-gray-900 mb-1">案例库</div>
+          <div class="text-xs text-gray-500 leading-relaxed">20+ 真实电商案例，可直接套用</div>
+        </div>
+      </a>
+      <a href="/methodologies" class="group flex items-start gap-4 p-5 rounded-xl border border-gray-200 bg-white hover:border-sky-200 hover:bg-sky-50/30 transition-all">
+        <div class="w-10 h-10 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">💡</div>
+        <div>
+          <div class="font-semibold text-sm text-gray-900 mb-1">方法论</div>
+          <div class="text-xs text-gray-500 leading-relaxed">RFM、AARRR、5Why 等框架一键应用</div>
+        </div>
+      </a>
+    </div>
+
+    <!-- Trust bar -->
+    <div class="mt-12 pt-8 border-t border-gray-100 flex flex-wrap items-center justify-center gap-8 text-sm text-gray-400">
+      <span>📊 已分析 <strong class="text-gray-700">10,000+</strong> 数据集</span>
+      <span>📋 生成 <strong class="text-gray-700">5,000+</strong> 份报告</span>
+      <span>⚡ 平均 <strong class="text-gray-700">3 分钟</strong> 出结果</span>
+    </div>
+  </div>
+</section>
+
+<script>
+// Tab switching (Demo A)
+function switchTab(idx) {
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === idx);
+    btn.style.background = i === idx ? '#EEF2FF' : '';
+    btn.style.borderColor = i === idx ? '#C7D2FE' : 'transparent';
+    btn.style.border = i === idx ? '1px solid #C7D2FE' : '1px solid transparent';
+  });
+  document.querySelectorAll('.tab-panel').forEach((panel, i) => {
+    panel.classList.toggle('hidden', i !== idx);
+    panel.classList.toggle('active', i === idx);
+  });
+}
+switchTab(0);
+
+// Carousel (Demo B)
+let currentSlide = 0;
+const totalSlides = 4; // 6 cards, 3 visible = 4 positions
+
+function moveCarousel(dir) {
+  currentSlide = Math.max(0, Math.min(totalSlides - 1, currentSlide + dir));
+  updateCarousel();
+}
+function goToSlide(idx) {
+  currentSlide = idx;
+  updateCarousel();
+}
+function updateCarousel() {
+  const track = document.getElementById('carouselTrack');
+  track.style.transform = `translateX(-${currentSlide * 33.333}%)`;
+  document.querySelectorAll('#carouselDots button').forEach((dot, i) => {
+    dot.className = `w-2 h-2 rounded-full ${i === currentSlide ? 'bg-gray-900' : 'bg-gray-300'}`;
+  });
+}
+
+// Nav highlighting
+document.querySelectorAll('.demo-nav a').forEach(link => {
+  link.addEventListener('click', function() {
+    document.querySelectorAll('.demo-nav a').forEach(l => l.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>

@@ -140,23 +140,39 @@ async function startServer() {
       const baseUrl = String(req.headers['x-llm-base-url'] || '');
       const temperature = Number(req.headers['x-llm-temperature'] || 0.2);
 
-      // 兜底：Gemini 仍允许走环境变量
-      const envFallback = provider === 'gemini' ? process.env.GEMINI_API_KEY : '';
-      const apiKey = clientApiKey || envFallback || '';
+      // 兜底逻辑：优先 DeepSeek（国内可直连），其次 Gemini
+      let finalProvider = provider;
+      let finalApiKey = clientApiKey || '';
+      let finalModel = model;
+      let finalBaseUrl = baseUrl || undefined;
 
-      if (!apiKey || apiKey === "undefined") {
+      if (!finalApiKey || finalApiKey === 'undefined') {
+        // 客户端没传 key，尝试服务端环境变量
+        if (process.env.DEEPSEEK_API_KEY) {
+          finalProvider = 'deepseek';
+          finalApiKey = process.env.DEEPSEEK_API_KEY;
+          finalModel = finalModel || 'deepseek-chat';
+          finalBaseUrl = finalBaseUrl || 'https://api.deepseek.com/v1';
+        } else if (process.env.GEMINI_API_KEY) {
+          finalProvider = 'gemini';
+          finalApiKey = process.env.GEMINI_API_KEY;
+          finalModel = finalModel || 'gemini-2.5-flash';
+        }
+      }
+
+      if (!finalApiKey || finalApiKey === "undefined") {
         throw new Error("API_KEY_MISSING");
       }
-      if (!model && provider !== 'gemini') {
-        throw new Error("MODEL_MISSING");
+      if (!finalModel && finalProvider !== 'gemini') {
+        finalModel = 'deepseek-chat';
       }
 
-      await callProvider(provider, {
+      await callProvider(finalProvider, {
         contents,
         systemInstruction,
-        apiKey,
-        model: model || 'gemini-2.5-flash',
-        baseUrl: baseUrl || undefined,
+        apiKey: finalApiKey,
+        model: finalModel || 'gemini-2.5-flash',
+        baseUrl: finalBaseUrl,
         temperature: isNaN(temperature) ? 0.2 : temperature,
       }, (token) => {
         res.write(`data: ${JSON.stringify({ type: 'token', content: token })}\n\n`);

@@ -8,6 +8,20 @@ export interface ReportTemplate {
 
 export const BUILTIN_TEMPLATES: ReportTemplate[] = [
   {
+    id: 'pyramid_business',
+    name: '金字塔原理 · 业务决策报告',
+    description: '结论先行 → 论据支撑 → 数据佐证，面向管理层的决策型报告',
+    isBuiltIn: true,
+    sections: [
+      { id: 1, title: '核心结论与行动建议', hint: '一句话核心结论 + P0/P1/P2 三级行动建议（ICE 评分），管理层看完这一页就能拍板' },
+      { id: 2, title: '关键发现（支撑论据）', hint: '3-5 个支撑核心结论的关键发现，每个发现配一个数据图表，用"因为A所以B"的因果链表达' },
+      { id: 3, title: '业务全景看板', hint: '核心 KPI 仪表盘：规模指标（GMV/订单量）、效率指标（转化率/客单价）、健康指标（留存/复购），配趋势图和对比图' },
+      { id: 4, title: '归因分析与根因拆解', hint: '对关键指标变动做维度下钻归因，找到"谁贡献了增长/谁拖了后腿"，用瀑布图展示' },
+      { id: 5, title: '风险预警与数据质量', hint: '数据可信度评估、异常值预警、分析盲区说明，让决策者知道哪些结论可以放心用' },
+      { id: 6, title: '附录：数据明细与方法论', hint: '字段说明、样本量、分析方法、置信区间等技术细节，供数据团队复核' },
+    ]
+  },
+  {
     id: 'standard_bi',
     name: '标准 BI 蓝图（7 段）',
     description: '通用电商场景，覆盖资产识别 → 看板 → 策略',

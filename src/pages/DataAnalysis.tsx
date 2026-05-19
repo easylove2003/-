@@ -14,10 +14,13 @@ import { fetchChatStream } from '../lib/api';
 import { buildSystemPrompt } from '../prompts';
 import { registerJsonAsTable, runSQL, describeTable } from '../lib/duckdb-engine';
 import { WorkflowStepper } from '../components/WorkflowStepper';
+import { PrivacyConsent, usePrivacyCheck } from '../components/PrivacyConsent';
+import { RateLimitBanner } from '../components/RateLimitBanner';
 
 export function DataAnalysis() {
   const { t, lang } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const privacy = usePrivacyCheck();
   const { records, selectedRecord, addRecord, deleteRecord, clearAllRecords, selectRecord } = useMemory();
   const [isDragging, setIsDragging] = useState(false);
   
@@ -253,6 +256,11 @@ SQL：${sqlText}
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
+    // 隐私检查：首次上传时弹窗确认
+    privacy.checkAndProceed(() => doFileUpload(file));
+  };
+
+  const doFileUpload = async (file: File) => {
     const isCsvOrTxt = file.name.endsWith('.csv') || file.name.endsWith('.txt');
     const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
 
@@ -408,7 +416,12 @@ SQL：${sqlText}
   };
 
   return (
-    <div className="flex h-screen w-full bg-[#FAFAFA] overflow-hidden">
+    <div className="flex h-screen w-full bg-[#F5F1EA] overflow-hidden">
+
+      {/* Privacy Consent Modal */}
+      {privacy.needsConsent && (
+        <PrivacyConsent trigger={privacy.needsConsent} onConsent={privacy.handleConsent} />
+      )}
       
       {/* 🚀 STEP 1: WELCOME OVERLAY */}
       <AnimatePresence>
@@ -598,17 +611,22 @@ SQL：${sqlText}
                        status: 'pending',
                        onClick: () => {
                          if (parsedData.length === 0) return;
-                         const payload = {
-                           fileName,
-                           data: parsedData.length > 5000 ? parsedData.slice(0, 5000) : parsedData,
-                           columns,
-                           columnStats,
-                           _truncated: parsedData.length > 5000,
-                           _originalRowCount: parsedData.length,
-                           exportedAt: new Date().toISOString()
-                         };
-                         sessionStorage.setItem('dc_pending_dataset', JSON.stringify(payload));
-                         window.location.href = '/smart-report?from=data-analysis';
+                         try {
+                           const payload = {
+                             fileName,
+                             data: parsedData.slice(0, 500),
+                             columns,
+                             columnStats,
+                             _truncated: parsedData.length > 500,
+                             _originalRowCount: parsedData.length,
+                             exportedAt: new Date().toISOString()
+                           };
+                           sessionStorage.setItem('dc_pending_dataset', JSON.stringify(payload));
+                           window.location.href = '/report?from=data-analysis';
+                         } catch (e) {
+                           console.error('Failed to store dataset', e);
+                           window.location.href = '/report';
+                         }
                        }
                      }
                    ]} />
@@ -668,13 +686,17 @@ SQL：${sqlText}
                            {!isDiagnosing && (
                              <button
                                onClick={() => {
-                                 sessionStorage.setItem('dc_pending_dataset', JSON.stringify({
-                                   data: parsedData,
-                                   columns,
-                                   fileName,
-                                   _truncated: fileName.includes('限制前5万行')
-                                 }));
-                                 window.location.href = '/smart-report?from=data-analysis';
+                                 try {
+                                   sessionStorage.setItem('dc_pending_dataset', JSON.stringify({
+                                     data: parsedData.slice(0, 500),
+                                     columns,
+                                     fileName,
+                                     _truncated: parsedData.length > 500
+                                   }));
+                                 } catch (e) {
+                                   console.error('Storage failed', e);
+                                 }
+                                 window.location.href = '/report?from=data-analysis';
                                }}
                                className="px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-2"
                              >

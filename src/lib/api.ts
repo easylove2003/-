@@ -1,5 +1,6 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { getLLMConfig, getEffectiveBaseUrl, getEffectiveModel } from './llm-config';
+import { canMakeRequest, consumeRequest, getRemainingRequests } from './rate-limiter';
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -92,6 +93,13 @@ export async function fetchChatStream(
   onError: (msg: string) => void,
   options: ChatStreamOptions = {}
 ) {
+  // Rate limiting check
+  if (!canMakeRequest()) {
+    onError(`今日 AI 调用次数已用完（每日限额 50 次）。明天将自动重置，或在设置中配置自己的 API Key 解除限制。`);
+    return;
+  }
+  consumeRequest();
+
   const { includeCanvasProtocol = false } = options;
 
   const cfg = getLLMConfig();
@@ -134,4 +142,57 @@ export async function fetchChatStream(
   } catch (err: any) {
     onError(err.message || 'Unknown error');
   }
+}
+
+/**
+ * 带自动重试的 fetchChatStream
+ * 网络错误或 5xx 错误时自动重试最多 2 次，间隔 2 秒
+ */
+export async function fetchChatStreamWithRetry(
+  contents: ChatMessage[],
+  systemInstructionText: string,
+  onChunk: (text: string) => void,
+  onError: (msg: string) => void,
+  options: ChatStreamOptions = {},
+  maxRetries: number = 2
+) {
+  let lastError = '';
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      // 等待 2 秒后重试
+      await new Promise(r => setTimeout(r, 2000));
+      onChunk(`\n\n⏳ 请求失败，正在第 ${attempt} 次重试...\n\n`);
+    }
+
+    let success = true;
+    let errorMsg = '';
+
+    await fetchChatStream(
+      contents,
+      systemInstructionText,
+      onChunk,
+      (msg) => {
+        // 判断是否是可重试的错误（网络错误、服务不可用）
+        const retryable = msg.includes('503') || msg.includes('暂不可用') ||
+          msg.includes('timeout') || msg.includes('network') ||
+          msg.includes('ECONNREFUSED') || msg.includes('稍后重试');
+        
+        if (retryable && attempt < maxRetries) {
+          success = false;
+          errorMsg = msg;
+        } else {
+          // 不可重试的错误（如 API Key 无效、次数用完），直接报错
+          onError(msg);
+          success = true; // 标记为"已处理"，不再重试
+        }
+      },
+      options
+    );
+
+    if (success) return;
+    lastError = errorMsg;
+  }
+
+  // 所有重试都失败
+  onError(`${lastError}（已重试 ${maxRetries} 次仍失败）`);
 }
